@@ -1,0 +1,61 @@
+{
+ "_note": "Reviewer corrections applied on top of labels.orig.jsonl after visual checks of the contact sheets (2026-09-24). apply_overrides.py regenerates labels.jsonl.",
+ "funsd_*": {
+  "capture_ok": [
+   "flatbed_scan",
+   "fax"
+  ],
+  "_why": "all FUNSD pages are binarised fax-era scans; scan vs fax is not visually separable here"
+ },
+ "arabic_*": {
+  "capture_ok": [
+   "digital_render",
+   "flatbed_scan"
+  ],
+  "_why": "crisp typeset pages with no text layer; could be a clean scan or an image-only render"
+ },
+ "gnhk_*": {
+  "legibility": null,
+  "_why": "legibility of handwriting photos is subjective"
+ },
+ "gnhk_04": {
+  "content.table": null,
+  "_why": "handwritten price list with column headings; table is borderline"
+ },
+ "olmocr_oldscans_01": {
+  "legibility": null,
+  "_why": "aged, textured handwritten page; clean vs degraded is a judgement call"
+ },
+ "olmocr_arxivmath_*": {
+  "content.code": null,
+  "_why": "pseudocode boxes are ambiguous between math and code"
+ },
+ "pdb_*_digital": {
+  "capture_ok": [
+   "digital_render",
+   "flatbed_scan",
+   "fax"
+  ],
+  "_why": "PureDocBench digital-degraded pages are synthetic degradations applied to a render; capture provenance is not a fair test there (added after first scoring, applied to all models)"
+ },
+ "pdb_labreport_zh_real": {
+  "capture_ok": [
+   "digital_render",
+   "screenshot"
+  ],
+  "_why": "visually a plain render with a thin viewer margin (added after first scoring)"
+ },
+ "olmocr_tables_02": {
+  "capture_ok": [
+   "flatbed_scan"
+  ],
+  "_why": "PDF is a full-page image with an invisible OCR layer; crop shows a bilevel scanned journal page (found while building the Jev test, 2026-09-24)"
+ },
+ "olmocr_tables_01": {
+  "capture_ok": [
+   "flatbed_scan",
+   "digital_render"
+  ],
+  "_why": "PDF is a full-page image with an invisible OCR layer; looks like a clean grey scan (found while building the Jev test)"
+ }
+}
