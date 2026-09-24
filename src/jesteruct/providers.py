@@ -175,12 +175,16 @@ class OpenRouter:
         self._batcher = _Batcher(self._decide_batch, settings.jev_batch_size, settings.jev_batch_wait_ms / 1000)
 
     async def decide(self, state: dict[str, str], questions: dict) -> Decision:
-        body = {"model": self._s.jev_model, "state": state, "questions": questions}
         if self._s.jev_batch_size > 1:
+            body = {"model": self._s.jev_model, "state": state, "questions": questions}
             key = cache_key("jev", _digest(JEV_PATH, {**body, "batch": self._s.jev_batch_size}))
             pending = _Pending(state, questions, key, asyncio.get_running_loop().create_future())
             self._batcher.add(pending)
             return await pending.future
+        return await self._decide_one(state, questions)
+
+    async def _decide_one(self, state: dict[str, str], questions: dict) -> Decision:
+        body = {"model": self._s.jev_model, "state": state, "questions": questions}
         answers, data, cost = await self._call(
             "jev", JEV_PATH, body, self._s.jev_timeout_s, self._s.jev_rpm, lambda d: _answers(d, questions)
         )
@@ -188,7 +192,8 @@ class OpenRouter:
 
     async def _decide_batch(self, pages: list["_Pending"]) -> None:
         """One Jev request for several pages. Each page's answers are cached under its own key, so a replay does
-        not depend on which pages happened to share a request."""
+        not depend on which pages happened to share a request. A page left alone is asked unprefixed, exactly as it
+        would be without batching."""
         todo = []
         for p in pages:
             cached = await self._store.get_json(p.key)
@@ -198,8 +203,17 @@ class OpenRouter:
                 todo.append(p)
         if not todo:
             return
-        state = {f"p{i}_{k}": v for i, p in enumerate(todo) for k, v in p.state.items()}
-        questions = {f"p{i}_{q}": _scoped(i, spec) for i, p in enumerate(todo) for q, spec in p.questions.items()}
+        solo = len(todo) == 1
+
+        def name(i: int, field: str) -> str:
+            return field if solo else f"p{i}_{field}"
+
+        state = {name(i, k): v for i, p in enumerate(todo) for k, v in p.state.items()}
+        questions = {
+            name(i, q): spec if solo else _scoped(i, spec)
+            for i, p in enumerate(todo)
+            for q, spec in p.questions.items()
+        }
         body = {"model": self._s.jev_model, "state": state, "questions": questions}
         try:
             answers, data, cost = await self._call(
@@ -216,8 +230,8 @@ class OpenRouter:
                 p.future.set_exception(e)
             return
         for i, p in enumerate(todo):
-            mine = {q: answers[f"p{i}_{q}"] for q in p.questions}
-            record = {"model": data.get("model"), "answers": {q: _raw(data, f"p{i}_{q}") for q in p.questions}}
+            mine = {q: answers[name(i, q)] for q in p.questions}
+            record = {"model": data.get("model"), "answers": {q: _raw(data, name(i, q)) for q in p.questions}}
             await self._store.put_json(p.key, record)
             p.future.set_result(Decision(answers=mine, model=data.get("model"), cost=cost / len(todo)))
 
