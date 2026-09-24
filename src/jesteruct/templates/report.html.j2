@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jesteruct route report</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f9f9f7;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-muted: #898781;
+    --gridline: #e1e0d9;
+    --border: rgba(11, 11, 11, 0.10);
+    --lane-l0: #86b6ef;
+    --lane-l1: #5598e7;
+    --lane-l2: #2a78d6;
+    --lane-l3: #1c5cab;
+    --lane-l4: #104281;
+    --lane-l5: #0d366b;
+    --lane-lq: #d03b3b;
+    --lane-lh: #fab219;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #0d0d0d;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-muted: #898781;
+      --gridline: #2c2c2a;
+      --border: rgba(255, 255, 255, 0.10);
+      --lane-l0: #b7d3f6;
+      --lane-l1: #86b6ef;
+      --lane-l2: #5598e7;
+      --lane-l3: #2a78d6;
+      --lane-l4: #1c5cab;
+      --lane-l5: #184f95;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--surface-2);
+    color: var(--ink-1);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1, h2 { font-weight: 600; margin: 0; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; }
+  .page-header { margin-bottom: 16px; }
+  .page-header .meta { margin: 4px 0 0; color: var(--ink-2); }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex: none; }
+  .lane-l0 { background: var(--lane-l0); }
+  .lane-l1 { background: var(--lane-l1); }
+  .lane-l2 { background: var(--lane-l2); }
+  .lane-l3 { background: var(--lane-l3); }
+  .lane-l4 { background: var(--lane-l4); }
+  .lane-l5 { background: var(--lane-l5); }
+  .lane-lq { background: var(--lane-lq); }
+  .lane-lh { background: var(--lane-lh); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .legend-item { display: flex; align-items: center; font-size: 12px; color: var(--ink-2); }
+  .legend-item strong { color: var(--ink-1); margin-right: 4px; }
+
+  .doc-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .doc-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tag, .badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--gridline);
+    background: var(--surface-2);
+    color: var(--ink-1);
+  }
+  .candidate { color: var(--ink-muted); margin-left: 4px; }
+
+  .segment-bar {
+    display: flex;
+    gap: 2px;
+    height: 14px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--surface-2);
+    margin-bottom: 14px;
+  }
+  .segment { min-width: 2px; }
+
+  .page-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .page-card {
+    border: 1px solid var(--gridline);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface-2);
+    display: flex;
+    flex-direction: column;
+  }
+  .thumb {
+    aspect-ratio: 3 / 4;
+    background: var(--surface-1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .thumb-empty { color: var(--ink-muted); font-size: 12px; }
+  .page-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .page-top { display: flex; align-items: center; justify-content: space-between; }
+  .index { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--surface-1);
+    border: 1px solid var(--gridline);
+    color: var(--ink-2);
+  }
+  .reasons { margin: 0; padding-left: 16px; font-size: 12px; color: var(--ink-2); }
+  .vision { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; font-size: 12px; }
+  .vision dt { color: var(--ink-muted); }
+  .vision dd { margin: 0; color: var(--ink-2); }
+  .timings { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--ink-muted); }
+</style>
+</head>
+<body>
+  <header class="page-header">
+    <h1>jesteruct route report</h1>
+    <p class="meta">{{ documents|length }} document{{ "s" if documents|length != 1 else "" }}</p>
+  </header>
+
+  <section class="legend" aria-label="lane legend">
+    {% for code, description in lanes.items() %}
+    <span class="legend-item"><span class="dot lane-{{ code|lower }}"></span><strong>{{ code }}</strong>{{ description }}</span>
+    {% endfor %}
+  </section>
+
+  {% for doc in documents %}
+  <article class="doc-card">
+    <header class="doc-head">
+      <h2>{{ doc.doc.name }}</h2>
+      <div class="doc-meta">
+        <span class="tag">{{ doc.doc.kind }}</span>
+        <span class="tag">{{ doc.page_count }} page{{ "s" if doc.page_count != 1 else "" }}</span>
+        {% for code, count in doc.lane_counts.items() %}
+        <span class="badge"><span class="dot lane-{{ code|lower }}"></span>{{ code }} &times; {{ count }}</span>
+        {% endfor %}
+      </div>
+    </header>
+
+    {% if doc.segments %}
+    <div class="segment-bar" role="img" aria-label="segments by lane">
+      {% for seg in doc.segments %}
+      <div class="segment lane-{{ seg.lane|lower }}" style="flex-basis: {{ "%.4f"|format(seg.width_pct) }}%"
+           title="{{ seg.lane }}: pages {{ seg.start }}-{{ seg.end }}{% if seg.modifiers %} ({{ seg.modifiers|join(', ') }}){% endif %}"></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="page-grid">
+      {% for page in doc.pages %}
+      {% set route = page.route %}
+      <div class="page-card">
+        <div class="thumb">
+          {% if page.thumb %}
+          <img src="{{ page.thumb }}" alt="page {{ route.index }} thumbnail">
+          {% else %}
+          <span class="thumb-empty">no thumbnail</span>
+          {% endif %}
+        </div>
+        <div class="page-body">
+          <div class="page-top">
+            <span class="index">#{{ route.index }}</span>
+            <span class="badge">
+              <span class="dot lane-{{ route.lane|lower }}"></span>{{ route.lane }}
+              {%- if route.lane == "LH" %} <span class="candidate">({{ route.candidate_lane }})</span>{% endif %}
+            </span>
+          </div>
+          <div class="stat-row"><span>path p</span><span>{{ "%.2f"|format(route.path_p) }}</span></div>
+          {% if route.modifiers %}
+          <div class="chips">{% for m in route.modifiers %}<span class="chip">{{ m }}</span>{% endfor %}</div>
+          {% endif %}
+          {% if route.reasons %}
+          <ul class="reasons">{% for r in route.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+          {% endif %}
+          {% if route.vision %}
+          <dl class="vision">
+            <dt>capture</dt><dd>{{ route.vision.capture }}</dd>
+            <dt>legibility</dt><dd>{{ route.vision.legibility }}</dd>
+            <dt>handwriting</dt><dd>{{ route.vision.handwriting }}</dd>
+            <dt>script</dt><dd>{{ route.vision.script }}</dd>
+          </dl>
+          {% endif %}
+          {% if route.timings_ms %}
+          <div class="timings">{% for k, v in route.timings_ms.items() %}<span>{{ k }} {{ v }}ms</span>{% endfor %}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+  {% endfor %}
+</body>
+</html>

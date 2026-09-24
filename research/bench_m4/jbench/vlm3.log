@@ -1,0 +1,41 @@
+google/gemini-3.1-flash-lite (reasoning=off) [Google] n=9/9 TTFT med 0.97s total med 1.13s max 1.42s | in_tok 1457 out_tok 49 cost $0.00043775
+   digital: {"handwriting": "none", "capture": "digital_render", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "digital_render", "legibility": "clean", "main_content": ["form", "table"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "digital_render", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+google/gemini-3.5-flash-lite (reasoning=minimal) [Google] n=9/9 TTFT med 1.14s total med 1.23s max 1.60s | in_tok 1457 out_tok 60 cost $0.0005871
+   digital: {"handwriting": "none", "capture": "digital_render", "legibility": "clean", "main_content": ["form", "table"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "camera_photo", "legibility": "hard_to_read", "main_content": ["form", "table"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "camera_photo", "legibility": "clean", "main_content": ["form", "table"], "script": "latin"}  valid=3/3
+google/gemini-2.5-flash-lite (reasoning=off) [Google] n=9/9 TTFT med 1.41s total med 1.49s max 1.62s | in_tok 1310 out_tok 63 cost $0.0001562
+   digital: {"handwriting": "none", "capture": "digital_render", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "annotations_only", "capture": "camera_photo", "legibility": "mild_issues", "main_content": ["form"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "camera_photo", "legibility": "mild_issues", "main_content": ["form"], "script": "latin"}  valid=3/3
+qwen/qwen3-vl-8b-instruct (reasoning=off) [Alibaba] n=9/9 TTFT med 0.49s total med 0.80s max 0.85s | in_tok 1190 out_tok 44 cost $0.00015925
+   digital: {"capture": "digital_render", "handwriting": "none", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   scan: {"capture": "digital_render", "handwriting": "none", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   photo: {"capture": "flatbed_scan", "handwriting": "none", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+qwen/qwen3-vl-30b-a3b-instruct (reasoning=off) [Alibaba] n=9/9 TTFT med 0.59s total med 0.86s max 1.02s | in_tok 1190 out_tok 35 cost $0.0001729
+   digital: {"capture": "digital_render", "handwriting": "none", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   scan: {"capture": "digital_render", "handwriting": "none", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   photo: {"capture": "digital_render", "handwriting": "none", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+google/gemma-4-26b-a4b-it (reasoning=off) [CoreWeave,NextBit] n=9/9 TTFT med 0.59s total med 2.04s max 4.09s | in_tok 290 out_tok 40 cost $2.658e-05
+   digital: {"handwriting": "none", "capture": "unsure", "legibility": "unsure", "main_content": ["form"], "script": "unsure"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "screenshot", "legibility": "hard_to_read", "main_content": ["form"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "unsure", "legibility": "unsure", "main_content": ["form", "table"], "script": "latin"}  valid=3/3
+anthropic/claude-haiku-4.5 (reasoning=off) [Amazon Bedrock] n=9/9 TTFT med 1.84s total med 2.51s max 2.96s | in_tok 1715 out_tok 41 cost $0.00192
+   digital: {"handwriting": "fields_filled_by_hand", "capture": "flatbed_scan", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "flatbed_scan", "legibility": "mild_issues", "main_content": ["form"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "camera_photo", "legibility": "mild_issues", "main_content": ["form"], "script": "latin"}  valid=3/3
+openai/gpt-5-mini (reasoning=minimal) [OpenAI] n=9/9 TTFT med 1.49s total med 2.12s max 2.55s | in_tok 1270 out_tok 55 cost $0.0001971
+   digital: {"handwriting": "none", "capture": "flatbed_scan", "legibility": "clean", "main_content": ["form", "table", "prose", "signature_page"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "flatbed_scan", "legibility": "clean", "main_content": ["form", "table", "letterhead"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "camera_photo", "legibility": "clean", "main_content": ["form", "table", "prose", "letterhead"], "script": "latin"}  valid=3/3
+openai/gpt-5-nano (reasoning=minimal) [OpenAI] n=9/9 TTFT med 1.24s total med 1.69s max 2.00s | in_tok 1538 out_tok 47 cost $9.57e-05
+   digital: {"handwriting": "none", "capture": "camera_photo", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "camera_photo", "legibility": "clean", "main_content": ["form"], "script": "latin"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "camera_photo", "legibility": "clean", "main_content": ["form", "letterhead", "signature_page"], "script": "latin"}  valid=3/3
+meta-llama/llama-4-scout (reasoning=off) [DeepInfra] n=9/9 TTFT med 1.08s total med 2.35s max 2.67s | in_tok 1916 out_tok 58 cost $0.000209
+   digital: {"handwriting": "none", "capture": "fax", "legibility": "clean", "main_content": ["form", "table"], "script": "latin"}  valid=3/3
+   scan: {"handwriting": "none", "capture": "fax", "legibility": "unsure", "main_content": ["form", "form"], "script": "mixed"}  valid=3/3
+   photo: {"handwriting": "none", "capture": "fax", "legibility": "clean", "main_content": ["form", "form", "form"], "script": "latin"}  valid=3/3
+mistralai/mistral-small-2603 FAILED 429 b'{"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"mistralai/mistral-small-2603 is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate y'

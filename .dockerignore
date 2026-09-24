@@ -1,0 +1,8 @@
+# Allowlist: the build reads only these, so .env, .git, .claude, .venv, bench/, research/, evalset/, out/ and .jst/
+# never reach the build context.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+**/__pycache__

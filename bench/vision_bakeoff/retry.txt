@@ -1,0 +1,5 @@
+cohere/command-a-plus
+mistralai/mistral-small-2603
+google/gemini-3.8-flash
+qwen/qwen3.8-flash
+qwen/qwen3.8-omni-flash
