@@ -16,15 +16,19 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
-# RapidOCR downloads its models on first use; do that here so containers never reach out at runtime.
+# RapidOCR and the layout model download their weights on first use; do that here so containers never reach out at
+# runtime.
 RUN /app/.venv/bin/python - <<'EOF'
 import cv2
 import numpy as np
 from rapidocr import RapidOCR
 
+from jesteruct.probes import layout
+
 image = np.full((64, 320, 3), 255, np.uint8)
 cv2.putText(image, "jesteruct", (10, 44), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 0), 3)
 print("rapidocr warm-up:", RapidOCR()(image).txts)
+print("layout warm-up:", layout.detect(np.full((1024, 768, 3), 255, np.uint8)))
 EOF
 
 

@@ -95,14 +95,21 @@ def _sentences(evidence: str) -> list[str]:
     return parts if sys.platform == "darwin" else [s for s in parts if not s.startswith("Page image:")]
 
 
+def _e1_part(evidence: str) -> list[str]:
+    """Evidence e2 moved the column estimate into its new layout sentence; everything else is still e1."""
+    for clause in (", text is laid out in two or more columns", ", text is in a single column"):
+        evidence = evidence.replace(clause, "")
+    return [s for s in _sentences(evidence) if not s.startswith("Layout:")]
+
+
 def test_evidence_matches_the_benchmark():
-    """Ported probes describe born-digital pages exactly as the benchmark (recorded on macOS) did, evidence e1."""
+    """Ported probes describe born-digital pages as the benchmark (recorded on macOS, evidence e1) did."""
     rows = [json.loads(line) for line in (ROOT / "bench/jev_lanes/states_v3.jsonl").read_text().split("\n") if line]
     golden = {row["id"]: row["state"]["page_evidence"] for row in rows}
     checked = 0
     for pdf in sorted(FILES.glob("pdf_*.pdf")):
         ev, _ = probe_page(PageRef(doc_path=str(pdf), index=0, kind="pdf"))
         if pdf.stem in golden and ev.pdf.image_coverage <= 0.9:  # born-digital pages: no OCR in their evidence
-            assert _sentences(build_state(ev, None)["page_evidence"]) == _sentences(golden[pdf.stem]), pdf.stem
+            assert _e1_part(build_state(ev, None)["page_evidence"]) == _e1_part(golden[pdf.stem]), pdf.stem
             checked += 1
     assert checked >= 15

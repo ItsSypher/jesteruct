@@ -1,12 +1,13 @@
 """Evidence in words: Jev reasons well over descriptions and poorly over raw numbers.
 
-The bins and phrases are frozen at EVIDENCE_VERSION (measured in bench/jev_lanes). Change them only together with a
-version bump and an eval run; the version is part of every route key.
+The bins and phrases are frozen at EVIDENCE_VERSION. Those of e1 were measured in bench/jev_lanes; e2 adds the layout
+sentence and the agreement of a PDF text layer with fresh OCR (issue #4). Change them only together with a version bump
+and an eval run; the version is part of every route key.
 """
 
-from .models import ImageQuality, PageEvidence, TextStats, VisionFacts
+from .models import ImageQuality, LayoutFacts, PageEvidence, TextStats, VisionFacts
 
-EVIDENCE_VERSION = "e1"
+EVIDENCE_VERSION = "e2"
 TEXT_SAMPLE_CHARS = 1200
 PREVIOUS_SAMPLE_CHARS = 600
 
@@ -87,11 +88,35 @@ def describe_structure(ev: PageEvidence) -> str:
         s.append("uses mathematical fonts")
     if f.mono_font:
         s.append("uses monospaced fonts")
-    if f.columns == 2:
-        s.append("text is laid out in two or more columns")
-    elif f.columns == 1:
-        s.append("text is in a single column")
+    if ev.layout is None:  # otherwise the layout sentence states the columns
+        s.extend(_columns(f.columns))
     return ", ".join(s) + "."
+
+
+def _columns(columns: int | None) -> list[str]:
+    if columns == 2:
+        return ["text is laid out in two or more columns"]
+    if columns == 1:
+        return ["text is in a single column"]
+    return []
+
+
+def _count(n: int, noun: str) -> str:
+    """A region count in coarse words: no, 1 to 4, or many."""
+    if n == 0:
+        return f"no {noun}s"
+    if n == 1:
+        return f"1 {noun}"
+    return f"{n if n < 5 else 'many'} {noun}s"
+
+
+def describe_layout(layout: LayoutFacts | None) -> str | None:
+    if layout is None:
+        return None
+    s = [_count(layout.counts.get(k, 0), k) for k in ("table", "formula", "figure")]
+    if layout.area.get("figure", 0.0) >= 0.6:  # the layout model sees most scans and photos as one big figure
+        s[-1] += " covering most of the page"
+    return "Layout: " + ", ".join(s + _columns(layout.columns)) + "."
 
 
 def describe_ocr(ev: PageEvidence) -> str | None:
@@ -100,6 +125,21 @@ def describe_ocr(ev: PageEvidence) -> str | None:
     c = ev.ocr.confidence
     level = "high" if c >= 0.9 else "medium" if c >= 0.7 else "low"
     return f"Quick OCR (English model) found {ev.ocr.lines} text lines with {level} average confidence."
+
+
+def describe_agreement(ev: PageEvidence) -> str | None:
+    """How well the embedded text layer matches a fresh OCR pass: a layer over handwriting rarely does."""
+    a = ev.ocr_agreement
+    if a is None:
+        return None
+    if a >= 0.5:
+        return "The embedded text layer and a fresh OCR pass mostly agree."
+    if a >= 0.2:
+        return "The embedded text layer and a fresh OCR pass partly agree."
+    return (
+        "The embedded text layer and a fresh OCR pass mostly disagree, "
+        "so the layer is probably not a faithful copy of the page."
+    )
 
 
 def describe_vision(v: VisionFacts | None) -> str:
@@ -115,11 +155,15 @@ def describe_vision(v: VisionFacts | None) -> str:
 def build_state(ev: PageEvidence, vision: VisionFacts | None, previous_text: str | None = None) -> dict[str, str]:
     """The `state` Jev decides over. The vision check is included only when it was run."""
     parts = [describe_structure(ev), describe_image(ev.image)]
+    if layout := describe_layout(ev.layout):
+        parts.append(layout)
     is_image = ev.pdf is None
     if not is_image:
         parts.append(describe_text(ev.text_stats, "Embedded text layer"))
     if ocr := describe_ocr(ev):
         parts.append(ocr)
+    if agreement := describe_agreement(ev):
+        parts.append(agreement)
     if is_image:
         parts.append(describe_text(ev.text_stats, "OCR text"))
     state = {"page_evidence": " ".join(parts)}
