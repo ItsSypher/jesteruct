@@ -11,7 +11,7 @@ import json
 from .calibrate import Calibration
 from .models import Lane, PageEvidence, PageRoute, VisionFacts
 
-POLICY_VERSION = "p2"
+POLICY_VERSION = "p3"
 
 ROUTING_QUESTIONS = {
     "text_layer_trustworthy": {
@@ -95,15 +95,19 @@ def text_layer_trusted(ev: PageEvidence) -> bool:
 
 
 def _lane(a: dict[str, float]) -> tuple[Lane, float, list[str]]:
-    """The rule table. Handwriting wins, then text-layer trust, then image condition."""
+    """The rule table. Handwriting wins, then text-layer trust, then image condition.
+
+    Mathematical notation makes a page complex even when Jev reads the equations in `complex_layout` as displayed
+    ones only; inline notation needs a math-aware lane just the same.
+    """
     hw, tl = a.get("mostly_handwritten", 0.0), a.get("text_layer_trustworthy", 0.0)
-    cx = a.get("complex_layout", 0.0)
+    cx = max(a.get("complex_layout", 0.0), a.get("has_math", 0.0))
     bad = max(a.get(k, 0.0) for k in ("camera_or_fax", "heavily_degraded", "capture_defects"))
     if hw >= 0.5:
         return "L5", hw, [f"mostly handwritten ({hw:.2f})"]
     if tl >= 0.5:
         if cx >= 0.5:
-            return "L2", (1 - hw) * tl * cx, [f"trusted text layer ({tl:.2f})", f"complex layout ({cx:.2f})"]
+            return "L2", (1 - hw) * tl * cx, [f"trusted text layer ({tl:.2f})", f"complex layout or math ({cx:.2f})"]
         return "L1", (1 - hw) * tl * (1 - cx), [f"trusted text layer ({tl:.2f})", f"simple layout ({1 - cx:.2f})"]
     if bad >= 0.5:
         return (
