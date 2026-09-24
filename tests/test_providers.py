@@ -86,3 +86,15 @@ def test_batched_decisions_share_one_request_and_cache_per_page(tmp_path):
     again = asyncio.run(both())  # each page's answers were cached on their own
     assert [d.answers for d in again] == [first.answers, second.answers]
     assert len(seen) == 1
+
+
+def test_a_lone_batched_page_is_asked_unprefixed(tmp_path):
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert set(json.loads(request.content)["state"]) == {"page_evidence"}
+        return httpx.Response(200, json={"answers": {"text_layer_trustworthy": {"noul": 0.8}}})
+
+    p, seen = provider(tmp_path, answer, jev_batch_size=4, jev_batch_wait_ms=1)
+    first = asyncio.run(p.decide({"page_evidence": "a"}, QUESTIONS))
+    again = asyncio.run(p.decide({"page_evidence": "a"}, QUESTIONS))
+    assert first.answers == again.answers == {"text_layer_trustworthy": 0.8}
+    assert len(seen) == 1 and again.cost == 0.0
