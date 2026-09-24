@@ -75,7 +75,8 @@ class Router:
             docs = await self._run(intake.expand, path, self.settings, Path(work), name)
             manifests = []
             for doc in docs:
-                label = str(path) if doc.parent_sha is None else doc.name
+                # the manifest records where the document came from, not the temp copy it was routed from
+                label = (name or str(path)) if doc.parent_sha is None else doc.name
                 manifests.append(
                     await self._route_doc(doc.model_copy(update={"path": label}), doc.path, text_overrides or {}, reuse)
                 )
