@@ -287,5 +287,6 @@ def test_api_submit_is_idempotent(settings, tmp_path):
         assert client.get(f"/v1/thumbs/{DOC_SHA}/0").status_code == 404
         info = client.get("/v1/info").json()
         assert info["route_key"] == route_key(settings) and info["questions"]["capture_defects"]["group"] == "routing"
+        assert len(info["questions"]["degradation"]["criteria"]) == 4  # the score's scale, for the Studio's labels
         assert client.get("/readyz").status_code == 200
         assert "<title>Studio</title>" in client.get("/").text  # the Studio, behind the API routes

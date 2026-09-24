@@ -101,7 +101,7 @@ def _info(settings: Settings, route_key: str) -> dict:
         "vision_model": settings.vision_model,
         "calibration": {"version": calibration.version, "threshold": calibration.threshold} if calibration else None,
         "questions": {
-            name: {"group": group, "instructions": spec["instructions"]}
+            name: {"group": group, "instructions": spec["instructions"], "criteria": spec.get("criteria")}
             for group, questions in groups.items()
             for name, spec in questions.items()
         },
@@ -198,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Progress of every job, or of one, as Server-Sent Events: recent history first, then live."""
 
         async def stream() -> AsyncIterator[str]:
+            yield ": connected\n\n"  # proxies pass the response on at once rather than at the first event
             async with svc().hub.subscribe(after=last_event_id, last=last) as messages:
                 async for message in messages:
                     if message is None or job is None or message[1]["j"] == job:

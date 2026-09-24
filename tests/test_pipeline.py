@@ -92,6 +92,7 @@ def test_route_mixed_document(tmp_path: Path):
     assert again.created_at == first.created_at
     assert asyncio.run(store.exists(manifest_key(first.doc.sha256, first.route_key)))
     assert all(asyncio.run(store.exists(p.thumb_key)) for p in first.pages)
+    assert all(p.evidence.startswith("Input: ") for p in first.pages)  # the manifest keeps what Jev was told
 
     job1 = [e for e in seen if e["job_id"] == "job-1"]
     assert (job1[0]["type"], job1[0]["page_count"]) == ("doc", 3)
