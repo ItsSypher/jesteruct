@@ -32,10 +32,10 @@ def probe(path: Annotated[Path, typer.Argument(exists=True)], page: int = 0) -> 
     typer.echo(json.dumps(asyncio.run(probe_state(path, page, get_settings())), indent=2, ensure_ascii=False))
 
 
-@app.command(name="eval")
+@app.command()
 def evaluate(
-    cases: Annotated[Path, typer.Option(help="Labelled cases (JSONL).")] = Path("eval/cases.jsonl"),
-    out: Annotated[Path, typer.Option(help="Where to write the report.")] = Path("out/eval"),
+    cases: Annotated[Path, typer.Option(help="Labelled cases (JSONL).")] = Path("evalset/cases.jsonl"),
+    out: Annotated[Path, typer.Option(help="Where to write the report.")] = Path("out/evaluate"),
     limit: int | None = None,
 ) -> None:
     """Route the labelled eval set and report lane accuracy, under-routing, latency and cost."""
