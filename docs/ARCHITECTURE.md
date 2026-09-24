@@ -39,6 +39,19 @@ file ──► intake ──► per page: probes ──► [OCR + vision] ──
 6. `policy.py` maps the five answers to a lane with a fixed rule table. The product of the answers along the rule path is the page's confidence; below `review_threshold` the page goes to LH, keeping its candidate lane.
 7. `segment.py` groups pages, and the manifest is written to the object store.
 
+## Measured
+
+`jst evaluate` on the 98 labelled cases in `evalset/` (M4 laptop, Apple Vision OCR, Gemini 3.8 Flash, 2026-09-24):
+
+| Metric | Value |
+|---|---|
+| Lane accuracy (candidate lane) | 0.929 |
+| Silent under-routing (final lane too weak) | 2.0% |
+| Sent to review (LH) | 5.1%, and 4 of those 5 had a wrong candidate lane |
+| Page latency, born-digital PDF | p50 0.4 s |
+| Page latency, all pages | p50 3.9 s, p95 14 s (the vision call dominates) |
+| Cost | about $2.10 per 1,000 pages, nearly all vision |
+
 ## Runtime
 
 One library, two ways to run it.
