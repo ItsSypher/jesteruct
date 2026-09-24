@@ -18,7 +18,7 @@ from redis.exceptions import RedisError
 log = logging.getLogger(__name__)
 
 STREAM = "jst:events"
-MAXLEN = 20_000  # about an hour of a busy cluster; the stream is a live feed, not a log
+MAXLEN = 20_000  # a few minutes at full throughput, about 30 MB: a live feed; the manifests are the record
 QUEUE = 2_000  # events buffered per browser; a viewer that falls this far behind is dropped and reconnects
 KEEPALIVE_S = 15.0
 
