@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     vision_timeout_s: float = 90
 
     # routing
-    review_threshold: float = 0.5  # path probability below this sends a page to LH
+    review_threshold: float = 0.5  # raw path probability below this sends a page to LH when no calibration is loaded
+    use_calibration: bool = True  # decide review on the shipped calibration (src/jesteruct/calibration.json)
     ocr_backend: Literal["auto", "apple", "rapid"] = "auto"
 
     # execution

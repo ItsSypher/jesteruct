@@ -116,6 +116,7 @@ class PageRoute(BaseModel):
     lane: Lane
     candidate_lane: Lane  # the policy's lane before review or quarantine overrides
     path_p: float  # product of the answers along the policy path
+    confidence: float | None = None  # calibrated P(candidate lane is right), when a calibration is loaded
     answers: dict[str, float] = Field(default_factory=dict)  # raw Jev answers, kept for calibration
     modifiers: list[str] = Field(default_factory=list)
     degradation: float | None = None

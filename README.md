@@ -23,6 +23,7 @@ uv run jst route samples/      # manifests in out/
 uv run jst view out            # out/report.html: thumbnails, lanes and reasons
 uv run jst probe file.pdf      # the evidence for one page, without calling any model
 uv run jst evaluate            # route the labelled set in evalset/ and report accuracy
+uv run jst calibrate out/evaluate/results.jsonl   # refit when to send a page to review
 ```
 
 ## Run it as a service
