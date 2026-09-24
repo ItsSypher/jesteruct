@@ -9,6 +9,7 @@ The engine is created lazily, once per process.
 import fcntl
 import logging
 import tempfile
+from collections.abc import Iterable
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -22,7 +23,9 @@ MODEL = "yolov8n_layout_general6"
 _NAMES = {"equation": "formula"}  # the other labels keep the model's names, lower-cased
 _TEXT = "text"  # body text; titles are left out, because slide bullets can come out as titles
 _COLUMN_WIDTH = 0.15  # share of the page width below which a text region is too narrow to be a column
-_SIDE_BY_SIDE = 0.3  # share of the page height over which text regions must sit side by side for two columns
+# Share of the text's height over which text regions must sit side by side for two columns. Born-digital L1 pages in
+# evalset/ and evalset/fresh have none at all; a letterhead's address beside its date stays far below this.
+_SIDE_BY_SIDE = 0.2
 
 Box = tuple[float, float, float, float]  # left, top, right, bottom as shares of the page size
 
@@ -65,17 +68,26 @@ def detect(page: bytes | np.ndarray) -> LayoutFacts:
 
 
 def _columns(text: list[Box]) -> Literal[1, 2] | None:
-    """Two columns when text regions sit side by side, apart horizontally, over a large share of the page height."""
+    """Two columns when text regions sit side by side, apart horizontally, over a large share of the text's height.
+
+    Measured against the text rather than the page, so banners, photos and white space do not hide a newsletter's
+    columns.
+    """
     if not text:
         return None
-    spans = sorted(
+    side_by_side = _height(
         (max(a[1], b[1]), min(a[3], b[3]))
         for i, a in enumerate(text)
         for b in text[i + 1 :]
         if (a[2] <= b[0] or b[2] <= a[0]) and min(a[3], b[3]) > max(a[1], b[1])
     )
+    return 2 if side_by_side >= _SIDE_BY_SIDE * _height((t[1], t[3]) for t in text) else 1
+
+
+def _height(spans: Iterable[tuple[float, float]]) -> float:
+    """The total height covered by vertical spans, overlaps counted once."""
     covered = reach = 0.0
-    for top, bottom in spans:
+    for top, bottom in sorted(spans):
         covered += max(0.0, bottom - max(top, reach))
         reach = max(reach, bottom)
-    return 2 if covered >= _SIDE_BY_SIDE else 1
+    return covered

@@ -33,10 +33,16 @@ def _script(ch: str) -> str:
     return "other"
 
 
+def _mathy(ch: str) -> bool:
+    """A mathematical symbol or operator (ASCII + = < > included), a Greek letter or a mathematical alphanumeric."""
+    return unicodedata.category(ch) == "Sm" or "Ͱ" <= ch <= "Ͽ" or "\U0001d400" <= ch <= "\U0001d7ff"
+
+
 def text_stats(text: str) -> TextStats:
     tokens = text.split()
     words = _WORD.findall(text)
     n = max(1, len(text))
+    visible = [ch for ch in text if not ch.isspace()]
     scripts: dict[str, int] = {}
     for ch in text:
         if ch.isalpha():
@@ -49,6 +55,7 @@ def text_stats(text: str) -> TextStats:
         odd_char_share=sum(unicodedata.category(ch) in ("Co", "Cn", "So") or ch == "�" for ch in text) / n,
         short_token_share=sum(len(t) < 2 for t in tokens) / max(1, len(tokens)),
         common_word_share=sum(w.lower() in _COMMON for w in words) / max(1, len(words)),
+        math_share=sum(map(_mathy, visible)) / max(1, len(visible)),
         script={k: round(v / letters, 2) for k, v in scripts.items()},
     )
 

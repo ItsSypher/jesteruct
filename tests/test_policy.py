@@ -34,6 +34,7 @@ def evidence(pdf: bool = True) -> PageEvidence:
         ({}, "L3"),
         ({"camera_or_fax": 0.9}, "L4"),
         ({"heavily_degraded": 0.8}, "L4"),
+        ({"capture_defects": 0.7}, "L4"),
         ({"mostly_handwritten": 0.9, "text_layer_trustworthy": 0.97, "camera_or_fax": 0.9}, "L5"),
     ],
 )
