@@ -45,6 +45,7 @@ override-dependencies = ["opencv-python; sys_platform == 'never'"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+extend-exclude = ["bench", "research"]  # experiment scripts, kept as evidence rather than maintained code
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
