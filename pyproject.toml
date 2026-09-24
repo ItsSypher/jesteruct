@@ -1,0 +1,55 @@
+[project]
+name = "jesteruct"
+version = "0.1.0"
+description = "Routes unstructured documents into processing lanes."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.141",
+    "httpx>=0.28",
+    "jinja2>=3.1",
+    "numpy>=2.2",
+    "obstore>=0.11",
+    "onnxruntime>=1.30",
+    "opencv-python-headless>=4.11",
+    "pebble>=5.2",
+    "pikepdf>=10",
+    "pillow>=11",
+    "pillow-heif>=1.8",
+    "prometheus-client>=0.26",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
+    "pypdfium2>=5.13",
+    "python-multipart>=0.0.32",
+    "rapidocr>=3.9",
+    "redis>=8.1",
+    "typer>=0.27",
+    "uvicorn[standard]>=0.53",
+    "ocrmac>=1.0.1; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+jst = "jesteruct.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=9.1", "ruff>=0.14"]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv]
+# rapidocr pins the GUI build of OpenCV; the headless build provides the same cv2 module without libGL.
+override-dependencies = ["opencv-python; sys_platform == 'never'"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
