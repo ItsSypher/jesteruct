@@ -215,6 +215,7 @@ class Router:
 
             route = policy.route_page(i, decision.answers, ev, vision, self.settings.review_threshold, self.calibration)
             route.reasons.extend(reasons)
+            route.evidence = state["page_evidence"]
             route.thumb_key = thumb
             route.timings_ms = {**timings, "total": _ms(start)}  # OCR and vision overlap, so stages don't sum to total
             await run.routed(route)
