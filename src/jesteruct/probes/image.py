@@ -4,10 +4,13 @@ import io
 
 import cv2
 import numpy as np
+import pillow_heif
 import pypdfium2 as pdfium
 from PIL import Image, ImageOps
 
 from ..models import ImageQuality
+
+pillow_heif.register_heif_opener()  # pool processes open phone photos (HEIC) without importing intake
 
 LONG_SIDE = 1024
 THUMB_SIDE = 320
