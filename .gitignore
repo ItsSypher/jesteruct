@@ -17,7 +17,7 @@ build/
 # local runtime output
 out/
 .cache/
-.jst/
+.jst*/
 
 # terraform
 .terraform/
@@ -42,3 +42,6 @@ bench/vision_bakeoff/data/contact_sheets/
 
 # os
 .DS_Store
+
+# local worktrees
+.claude/

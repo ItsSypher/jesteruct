@@ -1,0 +1,260 @@
+{
+"pdf_olmocr_tables_01": {
+"cols": 1,
+"gutter_at": 65,
+"gutter": 0.27,
+"left": 0.64,
+"right": 0.36
+},
+"pdf_olmocr_tables_02": {
+"cols": 2,
+"gutter_at": 57,
+"gutter": 0.08,
+"left": 0.56,
+"right": 0.69
+},
+"pdf_olmocr_tables_03": {
+"cols": 1,
+"gutter_at": 56,
+"gutter": 0.31,
+"left": 0.67,
+"right": 0.45
+},
+"pdf_olmocr_tables_04": {
+"cols": 1,
+"gutter_at": 70,
+"gutter": 0.24,
+"left": 0.54,
+"right": 0.18
+},
+"pdf_olmocr_arxivmath_01": {
+"cols": 1,
+"gutter_at": 69,
+"gutter": 0.59,
+"left": 0.75,
+"right": 0.52
+},
+"pdf_olmocr_arxivmath_02": {
+"cols": 2,
+"gutter_at": 49,
+"gutter": 0.07,
+"left": 0.68,
+"right": 0.95
+},
+"pdf_olmocr_arxivmath_03": {
+"cols": 1,
+"gutter_at": 70,
+"gutter": 0.44,
+"left": 0.69,
+"right": 0.35
+},
+"pdf_olmocr_arxivmath_04": {
+"cols": 1,
+"gutter_at": 67,
+"gutter": 0.76,
+"left": 0.75,
+"right": 0.6
+},
+"pdf_olmocr_multicol_01": {
+"cols": 1,
+"gutter_at": 49,
+"gutter": 0.22,
+"left": 0.81,
+"right": 0.81
+},
+"pdf_olmocr_multicol_02": {
+"cols": 2,
+"gutter_at": 48,
+"gutter": 0.01,
+"left": 0.66,
+"right": 0.84
+},
+"pdf_olmocr_multicol_03": {
+"cols": 2,
+"gutter_at": 63,
+"gutter": 0.0,
+"left": 0.78,
+"right": 0.78
+},
+"pdf_code_01": {
+"cols": 1,
+"gutter_at": 70,
+"gutter": 0.06,
+"left": 0.5,
+"right": 0.0
+},
+"pdf_code_02": {
+"cols": 1,
+"gutter_at": 69,
+"gutter": 0.07,
+"left": 0.65,
+"right": 0.01
+},
+"pdf_olmx_01": {
+"cols": 2,
+"gutter_at": 39,
+"gutter": 0.08,
+"left": 0.67,
+"right": 0.67
+},
+"pdf_olmx_02": {
+"cols": 2,
+"gutter_at": 30,
+"gutter": 0.0,
+"left": 0.4,
+"right": 0.38
+},
+"pdf_olmx_03": {
+"cols": 1,
+"gutter_at": 48,
+"gutter": 0.0,
+"left": 0.86,
+"right": 0.15
+},
+"pdf_olmx_04": {
+"cols": 2,
+"gutter_at": 49,
+"gutter": 0.04,
+"left": 0.87,
+"right": 0.86
+},
+"pdf_olmx_05": {
+"cols": 2,
+"gutter_at": 50,
+"gutter": 0.02,
+"left": 0.89,
+"right": 0.86
+},
+"pdf_olmx_06": {
+"cols": null
+},
+"pdf_olmx_07": {
+"cols": null
+},
+"pdf_olmx_08": {
+"cols": 1,
+"gutter_at": 58,
+"gutter": 0.73,
+"left": 0.82,
+"right": 0.66
+},
+"pdf_olmx_09": {
+"cols": 1,
+"gutter_at": 70,
+"gutter": 0.63,
+"left": 0.67,
+"right": 0.34
+},
+"pdf_olmx_10": {
+"cols": 1,
+"gutter_at": 42,
+"gutter": 0.25,
+"left": 0.45,
+"right": 0.47
+},
+"pdf_olmx_11": {
+"cols": 2,
+"gutter_at": 47,
+"gutter": 0.0,
+"left": 0.86,
+"right": 0.83
+},
+"pdf_olmx_12": {
+"cols": 1,
+"gutter_at": 30,
+"gutter": 0.02,
+"left": 0.02,
+"right": 0.67
+},
+"ocr_olmocr_oldscans_02": {
+"cols": 1,
+"gutter_at": 52,
+"gutter": 0.54,
+"left": 0.75,
+"right": 0.69
+},
+"ocr_olmocr_oldscans_04": {
+"cols": 1,
+"gutter_at": 38,
+"gutter": 0.57,
+"left": 0.47,
+"right": 0.69
+},
+"ocr_funsd_03": {
+"cols": 1,
+"gutter_at": 70,
+"gutter": 0.26,
+"left": 0.7,
+"right": 0.15
+},
+"ocr_funsd_04": {
+"cols": 1,
+"gutter_at": 58,
+"gutter": 0.26,
+"left": 0.66,
+"right": 0.38
+},
+"ocr_pdb_jacs_digital": {
+"cols": 1,
+"gutter_at": 48,
+"gutter": 0.27,
+"left": 0.45,
+"right": 0.78
+},
+"ocr_pdb_bankrisk_clean": {
+"cols": 1,
+"gutter_at": 45,
+"gutter": 0.36,
+"left": 0.71,
+"right": 0.55
+},
+"ocr_synth_fax_02": {
+"cols": 1,
+"gutter_at": 51,
+"gutter": 0.0,
+"left": 0.41,
+"right": 0.21
+},
+"ocr_gnhk_02": {
+"cols": 1,
+"gutter_at": 30,
+"gutter": 0.1,
+"left": 0.05,
+"right": 0.63
+},
+"garb_olmx_08_cid": {
+"cols": 1,
+"gutter_at": 58,
+"gutter": 0.73,
+"left": 0.82,
+"right": 0.66
+},
+"garb_olmx_12_shift": {
+"cols": 1,
+"gutter_at": 30,
+"gutter": 0.02,
+"left": 0.02,
+"right": 0.67
+},
+"garb_olmx_03_mojibake": {
+"cols": 1,
+"gutter_at": 48,
+"gutter": 0.0,
+"left": 0.86,
+"right": 0.15
+},
+"garb_olmocr_multicol_01_shift": {
+"cols": 1,
+"gutter_at": 49,
+"gutter": 0.22,
+"left": 0.81,
+"right": 0.81
+},
+"garb_olmocr_arxivmath_01_cid": {
+"cols": 1,
+"gutter_at": 69,
+"gutter": 0.59,
+"left": 0.75,
+"right": 0.52
+}
+}

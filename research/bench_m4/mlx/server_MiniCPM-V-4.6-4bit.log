@@ -1,0 +1,19 @@
+INFO:     Started server process [68077]
+INFO:     Waiting for application startup.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 2510.39it/s]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8089 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52715 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52716 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52716 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52716 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52717 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52717 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52717 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52717 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52717 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52717 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [68077]

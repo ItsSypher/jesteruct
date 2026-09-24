@@ -1,0 +1,11 @@
+valkey:
+  image: valkey/valkey:8
+
+seaweedfs:
+  image: chrislusf/seaweedfs:4.47
+  storage: 10Gi
+  bucket: jesteruct
+  # One static S3 identity, allowed only on the bucket. Clients sign with it as AWS_ACCESS_KEY_ID and
+  # AWS_SECRET_ACCESS_KEY, the same way they would against a cloud bucket.
+  accessKey: devstack
+  secretKey: devstack-secret

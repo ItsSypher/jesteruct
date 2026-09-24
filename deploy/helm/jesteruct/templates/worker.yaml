@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jesteruct.fullname" . }}-worker
+  labels:
+    {{- include "jesteruct.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.keda.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "jesteruct.selector" (list . "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jesteruct.selector" (list . "worker") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "jesteruct.checksums" . | nindent 8 }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.worker.metricsPort | quote }}
+    spec:
+      {{- include "jesteruct.podSpec" . | nindent 6 }}
+      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      containers:
+        - name: worker
+          {{- include "jesteruct.container" . | nindent 10 }}
+          env:
+            # Size the probe process pool from the CPU limit (rounded up to whole cores).
+            - name: JST_CPU_WORKERS
+              valueFrom:
+                resourceFieldRef:
+                  containerName: worker
+                  resource: limits.cpu
+                  divisor: "1"
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jesteruct.openrouterSecret" . }}
+                  key: {{ .Values.openrouter.secretKey }}
+            {{- with include "jesteruct.valkeyEnv" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
+          args: ["worker", "--metrics-port", "{{ .Values.worker.metricsPort }}"]
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.worker.metricsPort }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

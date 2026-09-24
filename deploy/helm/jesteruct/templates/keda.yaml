@@ -1,0 +1,56 @@
+{{- if .Values.keda.enabled }}
+{{- $name := printf "%s-worker" (include "jesteruct.fullname" .) }}
+{{- $u := urlParse (required "valkeyUrl is required" .Values.valkeyUrl) }}
+{{- $conn := dict
+  "address" (ternary $u.host (printf "%s:6379" $u.host) (contains ":" $u.host))
+  "databaseIndex" (trimPrefix "/" $u.path | default "0")
+  "stream" .Values.queue.stream
+  "consumerGroup" .Values.queue.group }}
+{{- if eq $u.scheme "rediss" }}
+{{- $_ := set $conn "enableTLS" "true" }}
+{{- end }}
+{{- with .Values.valkeyPassword.existingSecret }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "jesteruct.labels" $ | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: {{ . }}
+      key: {{ $.Values.valkeyPassword.key }}
+---
+{{- end }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "jesteruct.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ $name }}
+  minReplicaCount: {{ .Values.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.keda.maxReplicas }}
+  cooldownPeriod: {{ .Values.keda.cooldownSeconds }}
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  triggers:
+    # Backlog: documents not yet handed to any worker.
+    - type: redis-streams
+      metadata:
+        {{- toYaml (merge (dict "lagCount" (toString .Values.keda.lagCount) "activationLagCount" "0") $conn) | nindent 8 }}
+      {{- if .Values.valkeyPassword.existingSecret }}
+      authenticationRef:
+        name: {{ $name }}
+      {{- end }}
+    # In flight: one replica per maxDocs unacknowledged documents, so busy workers are not scaled away.
+    - type: redis-streams
+      metadata:
+        {{- toYaml (merge (dict "pendingEntriesCount" (toString .Values.worker.maxDocs)) $conn) | nindent 8 }}
+      {{- if .Values.valkeyPassword.existingSecret }}
+      authenticationRef:
+        name: {{ $name }}
+      {{- end }}
+{{- end }}
