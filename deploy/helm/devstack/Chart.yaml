@@ -1,0 +1,5 @@
+apiVersion: v2
+name: devstack
+description: Local stand-ins for the router's dependencies - Valkey and S3 (SeaweedFS). Not for production.
+type: application
+version: 0.1.0
