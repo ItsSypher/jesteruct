@@ -20,7 +20,8 @@ import httpx
 from pebble import ProcessPool
 from redis.asyncio import Redis
 
-from . import __version__, intake, policy, probes
+from . import __version__, calibrate, intake, policy, probes
+from .calibrate import Calibration
 from .config import Settings
 from .evidence import EVIDENCE_VERSION, build_state
 from .limiter import LocalLimiter, ValkeyLimiter
@@ -32,21 +33,52 @@ from .store import Store, manifest_key, thumb_key
 
 log = logging.getLogger(__name__)
 
+CALIBRATION_FILE = Path(__file__).with_name("calibration.json")  # written by `jst calibrate`, shipped with the package
+
+
+def _digest(parts: dict) -> str:
+    return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def answer_basis(settings: Settings) -> str:
+    """What Jev's answers depend on. A calibration fitted on answers of another basis does not describe these.
+
+    The OCR backend is left out on purpose: it was measured not to change routing (docs/ARCHITECTURE.md), and a
+    calibration fitted natively on macOS must serve the Linux containers too.
+    """
+    return _digest(
+        {
+            "evidence": EVIDENCE_VERSION,
+            "policy": policy.POLICY_VERSION,
+            "questions": policy.questions_hash(),
+            "jev": settings.jev_model,
+            "vision": settings.vision_model,
+            "jev_batch": settings.jev_batch_size,
+        }
+    )
+
+
+def load_calibration(settings: Settings) -> Calibration | None:
+    """The shipped calibration, if enabled and fitted on this answer basis; otherwise review uses the raw threshold."""
+    calibration = calibrate.load(CALIBRATION_FILE) if settings.use_calibration else None
+    if calibration and calibration.basis != answer_basis(settings):
+        log.warning("calibration %s was fitted on other evidence or models; not applied", calibration.version)
+        return None
+    return calibration
+
 
 def route_key(settings: Settings) -> str:
     """Everything that can change a route. Equal keys mean a stored manifest can be reused."""
-    parts = {
-        "router": __version__,
-        "evidence": EVIDENCE_VERSION,
-        "policy": policy.POLICY_VERSION,
-        "questions": policy.questions_hash(),
-        "jev": settings.jev_model,
-        "vision": settings.vision_model,
-        "ocr": resolve_backend(settings.ocr_backend),
-        "review": settings.review_threshold,
-        "jev_batch": settings.jev_batch_size,
-    }
-    return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:16]
+    calibration = load_calibration(settings)
+    return _digest(
+        {
+            "answers": answer_basis(settings),
+            "calibration": calibration.version if calibration else None,
+            "router": __version__,
+            "ocr": resolve_backend(settings.ocr_backend),
+            "review": settings.review_threshold,
+        }
+    )
 
 
 class Router:
@@ -57,6 +89,7 @@ class Router:
         self._pool = pool
         self._pages = asyncio.Semaphore(settings.page_concurrency)
         self.ocr_backend = resolve_backend(settings.ocr_backend)
+        self.calibration = load_calibration(settings)
         self.route_key = route_key(settings)
         self.versions = Versions(
             router=__version__,
@@ -173,7 +206,7 @@ class Router:
             if decision.model:
                 served.append(decision.model)
 
-            route = policy.route_page(i, decision.answers, ev, vision, self.settings.review_threshold)
+            route = policy.route_page(i, decision.answers, ev, vision, self.settings.review_threshold, self.calibration)
             route.reasons.extend(reasons)
             route.thumb_key = thumb_key(doc.sha256, i)
             route.timings_ms = {**timings, "total": _ms(start)}  # OCR and vision overlap, so stages don't sum to total

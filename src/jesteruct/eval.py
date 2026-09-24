@@ -130,9 +130,10 @@ def _report_md(summary: dict, rows: list[dict], errors: list[dict]) -> str:
 
 
 async def run_eval(cases: Path, settings: Settings, out: Path, limit: int | None = None) -> dict:
-    from .pipeline import open_router
+    from .pipeline import answer_basis, open_router
 
     out.mkdir(parents=True, exist_ok=True)
+    basis = answer_basis(settings)  # recorded on every row, so `jst calibrate` knows what the answers came from
     root = cases.parent
     eval_cases = _load_cases(cases, limit)
     sem = asyncio.Semaphore(settings.page_concurrency)
@@ -159,6 +160,7 @@ async def run_eval(cases: Path, settings: Settings, out: Path, limit: int | None
                     "lane": route.lane,
                     "candidate": route.candidate_lane,
                     "path_p": route.path_p,
+                    "basis": basis,
                     "answers": route.answers,
                     "vision_used": route.vision is not None,
                     "reasons": route.reasons,

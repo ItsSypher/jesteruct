@@ -8,6 +8,7 @@ questions ride along in the same request. Question wording is part of POLICY_VER
 import hashlib
 import json
 
+from .calibrate import Calibration
 from .models import Lane, PageEvidence, PageRoute, VisionFacts
 
 POLICY_VERSION = "p2"
@@ -136,11 +137,24 @@ def _modifiers(lane: Lane, a: dict[str, float], ev: PageEvidence, vision: Vision
 
 
 def route_page(
-    index: int, answers: dict[str, float], ev: PageEvidence, vision: VisionFacts | None, review_threshold: float
+    index: int,
+    answers: dict[str, float],
+    ev: PageEvidence,
+    vision: VisionFacts | None,
+    review_threshold: float,
+    calibration: Calibration | None = None,
 ) -> PageRoute:
+    """Lane from the rule table. With a calibration, review is decided on the calibrated probability that the lane
+    is right (`calibrate.py`); without one, on the raw path probability."""
     lane, path_p, reasons = _lane(answers)
     final: Lane = lane
-    if path_p < review_threshold:
+    confidence: float | None = None
+    if calibration:
+        confidence = calibration(lane, path_p)
+        if confidence < calibration.threshold:
+            final = "LH"
+            reasons.append(f"low confidence (calibrated {confidence:.2f} < {calibration.threshold:.2f})")
+    elif path_p < review_threshold:
         final = "LH"
         reasons.append(f"low confidence (path {path_p:.2f} < {review_threshold:.2f})")
     return PageRoute(
@@ -148,6 +162,7 @@ def route_page(
         lane=final,
         candidate_lane=lane,
         path_p=round(path_p, 4),
+        confidence=None if confidence is None else round(confidence, 4),
         answers=answers,
         modifiers=_modifiers(lane, answers, ev, vision),
         degradation=answers.get("degradation"),

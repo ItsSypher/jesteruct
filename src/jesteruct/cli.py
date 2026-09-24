@@ -46,6 +46,32 @@ def evaluate(
 
 
 @app.command()
+def calibrate(
+    results: Annotated[list[Path], typer.Argument(exists=True, help="`jst evaluate` results.jsonl file(s) to fit on.")],
+    check: Annotated[Path | None, typer.Option(exists=True, help="Held-out results.jsonl to report on.")] = None,
+    cost_ratio: Annotated[float, typer.Option(help="Cost of a silent wrong lane / cost of one review.")] = 10.0,
+    out: Annotated[Path | None, typer.Option(help="Where to write the calibration.")] = None,
+) -> None:
+    """Fit the review calibration on evaluation results and write it where the router loads it."""
+    from . import calibrate as cal
+    from .pipeline import CALIBRATION_FILE
+
+    rows = [json.loads(line) for path in results for line in path.read_text().split("\n") if line.strip()]
+    fitted = cal.fit(rows, cost_ratio, fitted_on=", ".join(str(p) for p in results))
+    cal.save(fitted, out or CALIBRATION_FILE)
+    report = {
+        "version": fitted.version,
+        "n": fitted.n,
+        "threshold": fitted.threshold,
+        "fit": cal.evaluate(fitted, rows),
+    }
+    if check:
+        held_out = [json.loads(line) for line in check.read_text().split("\n") if line.strip()]
+        report["check"] = cal.evaluate(fitted, held_out)
+    typer.echo(json.dumps(report, indent=2))
+
+
+@app.command()
 def view(
     manifests: Annotated[Path, typer.Argument(exists=True, help="Directory of manifests.")] = Path("out"),
     out: Annotated[Path, typer.Option()] = Path("out/report.html"),
