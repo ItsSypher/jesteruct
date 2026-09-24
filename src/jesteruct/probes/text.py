@@ -1,4 +1,5 @@
-"""Statistics that tell readable text from garbage: common-word share, encoding codes, odd symbols, script."""
+"""Statistics that tell readable text from garbage: common-word share, encoding codes, odd symbols, script, and how
+well two readings of one page agree."""
 
 import re
 import unicodedata
@@ -6,6 +7,7 @@ import unicodedata
 from ..models import TextStats
 
 _WORD = re.compile(r"[A-Za-z]{2,}")
+_AGREEMENT_WORD = re.compile(r"[A-Za-z]{3,}")
 _CID = re.compile(r"\(cid:\d+\)")
 _COMMON = set(
     "the of and to in a is that for it as was with be by on not he this are or his from at which but have an they "
@@ -49,3 +51,12 @@ def text_stats(text: str) -> TextStats:
         common_word_share=sum(w.lower() in _COMMON for w in words) / max(1, len(words)),
         script={k: round(v / letters, 2) for k, v in scripts.items()},
     )
+
+
+def agreement(layer: str, ocr: str) -> float | None:
+    """Jaccard similarity of the lower-cased words of three or more letters; None when the layer has no such words."""
+    a = {w.lower() for w in _AGREEMENT_WORD.findall(layer)}
+    if not a:
+        return None
+    b = {w.lower() for w in _AGREEMENT_WORD.findall(ocr)}
+    return round(len(a & b) / len(a | b), 3)

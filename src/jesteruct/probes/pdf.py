@@ -1,5 +1,7 @@
 """PDF structure: the embedded text layer, image coverage, invisible OCR text, producer, fonts and a column estimate.
 
+The column estimate here is the fallback for when the layout model (`layout.py`) fails.
+
 pdfium is not thread-safe; these functions run inside the probe process pool, one call at a time per process.
 """
 

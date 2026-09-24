@@ -71,6 +71,15 @@ class PdfFacts(BaseModel):
     columns: Literal[1, 2] | None = None  # None when there is too little text to tell
 
 
+class LayoutFacts(BaseModel):
+    """Regions a layout model found on the page image."""
+
+    model: str
+    counts: dict[str, int] = Field(default_factory=dict)  # regions per label
+    area: dict[str, float] = Field(default_factory=dict)  # share of the page area per label, at most 1
+    columns: Literal[1, 2] | None = None  # from the text regions; None when there are none
+
+
 class OcrResult(BaseModel):
     text: str
     confidence: float
@@ -84,10 +93,12 @@ class PageEvidence(BaseModel):
     ref: PageRef
     image: ImageQuality
     pdf: PdfFacts | None = None
-    text: str = ""  # embedded text layer (PDF) or OCR text (image), truncated
+    layout: LayoutFacts | None = None  # None when the layout model failed
+    text: str = ""  # embedded text layer (PDF) or OCR text (image), capped against hostile files
     text_stats: TextStats = Field(default_factory=TextStats)
     ocr: OcrResult | None = None  # fresh OCR, run when the text layer is missing or not trusted
     ocr_stats: TextStats | None = None
+    ocr_agreement: float | None = None  # word overlap of a PDF text layer with the fresh OCR text
 
 
 class VisionFacts(BaseModel):
