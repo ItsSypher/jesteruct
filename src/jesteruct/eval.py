@@ -17,6 +17,7 @@ _METRIC_COLUMNS = (
     "accuracy",
     "candidate_accuracy",
     "under_route",
+    "candidate_under_route",
     "over_route",
     "review_rate",
     "p50_ms",
@@ -53,14 +54,18 @@ def _metrics(rows: list[dict]) -> dict:
     n = len(rows)
     if n == 0:
         return {**dict.fromkeys(_METRIC_COLUMNS, 0), "confusion": {}}
-    under = over = 0
+    # under_route counts silent failures: the final lane is too weak. A page sent to review (LH) is not silent, so
+    # it only shows in candidate_under_route, the policy's lane before review.
+    under = candidate_under = over = 0
     for row in rows:
         gt_ranks = [LANE_RANK[g] for g in row["gt"] if g in LANE_RANK]
-        if not gt_ranks or row["candidate"] not in LANE_RANK:
+        if not gt_ranks:
             continue
-        rank = LANE_RANK[row["candidate"]]
-        under += rank < min(gt_ranks)
-        over += rank > max(gt_ranks)
+        if row["lane"] in LANE_RANK:
+            under += LANE_RANK[row["lane"]] < min(gt_ranks)
+            over += LANE_RANK[row["lane"]] > max(gt_ranks)
+        if row["candidate"] in LANE_RANK:
+            candidate_under += LANE_RANK[row["candidate"]] < min(gt_ranks)
     latencies = [row["latency_ms"] for row in rows]
     cost = sum(row["cost_usd"] for row in rows)
     confusion: dict[str, dict[str, int]] = {}
@@ -73,6 +78,7 @@ def _metrics(rows: list[dict]) -> dict:
         "accuracy": round(sum(row["lane"] in row["gt"] for row in rows) / n, 4),
         "candidate_accuracy": round(sum(row["candidate"] in row["gt"] for row in rows) / n, 4),
         "under_route": round(under / n, 4),
+        "candidate_under_route": round(candidate_under / n, 4),
         "over_route": round(over / n, 4),
         "review_rate": round(sum(row["lane"] == "LH" for row in rows) / n, 4),
         "p50_ms": _percentile(latencies, 0.5),
@@ -156,7 +162,7 @@ async def run_eval(cases: Path, settings: Settings, out: Path, limit: int | None
                     "answers": route.answers,
                     "vision_used": route.vision is not None,
                     "reasons": route.reasons,
-                    "latency_ms": sum(route.timings_ms.values()),
+                    "latency_ms": route.timings_ms.get("total", sum(route.timings_ms.values())),
                     "cost_usd": manifests[0].cost_usd,
                 }
             )

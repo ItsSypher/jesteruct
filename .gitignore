@@ -17,7 +17,7 @@ build/
 # local runtime output
 out/
 .cache/
-.jst/
+.jst*/
 
 # terraform
 .terraform/
