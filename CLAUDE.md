@@ -27,6 +27,7 @@ Read `docs/ARCHITECTURE.md` before changing anything; it holds the design and th
 - **Evidence wording is frozen** at `EVIDENCE_VERSION`, and the question set and rule table at `POLICY_VERSION`. Change either only with a version bump and a `jst evaluate` run that does not regress lane accuracy or silent under-routing.
 - **Failures degrade and never flood review.** Provider outages and auth or billing errors fail the job (it is redelivered). A single rejected request sends that page to LH.
 - **Quality comes first, then latency and cost:** pick the best quality-to-speed ratio. Confidentiality is not a constraint for now, so hosted models are fine.
+- **Licences are not a constraint for now.** Use the best publicly available models and datasets (AGPL, non-commercial and research-only included), and record each source's licence as information.
 
 ## Where it runs
 
