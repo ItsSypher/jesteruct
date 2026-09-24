@@ -30,7 +30,15 @@ def resolve_backend(requested: str) -> str:
 def _rapid():
     from rapidocr import RapidOCR
 
-    return RapidOCR(params={"Global.log_level": "warning"})
+    # One thread per engine: the probe pool already runs one process per core, and ONNX Runtime's default of one thread
+    # per core in every process oversubscribes the CPU many times over.
+    return RapidOCR(
+        params={
+            "Global.log_level": "warning",
+            "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+            "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+        }
+    )
 
 
 def _apple(jpeg: bytes) -> OcrResult:
