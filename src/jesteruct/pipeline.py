@@ -70,7 +70,12 @@ class Router:
     async def route_file(
         self, path: Path, name: str | None = None, text_overrides: dict[int, str] | None = None, reuse: bool = True
     ) -> list[Manifest]:
-        """One manifest per routable document in the file (containers expand into their children)."""
+        """One manifest per routable document in the file (containers expand into their children).
+
+        `text_overrides` replaces a page's embedded text (used by the eval to test garbled layers). Such a route does
+        not describe the stored bytes, so it neither reuses nor stores manifests.
+        """
+        persist = not text_overrides
         with tempfile.TemporaryDirectory(prefix="jst-") as work:
             docs = await self._run(intake.expand, path, self.settings, Path(work), name)
             manifests = []
@@ -78,11 +83,13 @@ class Router:
                 # the manifest records where the document came from, not the temp copy it was routed from
                 label = (name or str(path)) if doc.parent_sha is None else doc.name
                 manifests.append(
-                    await self._route_doc(doc.model_copy(update={"path": label}), doc.path, text_overrides or {}, reuse)
+                    await self._route_doc(
+                        doc.model_copy(update={"path": label}), doc.path, text_overrides or {}, reuse and persist, persist
+                    )
                 )
             return manifests
 
-    async def _route_doc(self, doc: Doc, local: str, overrides: dict[int, str], reuse: bool) -> Manifest:
+    async def _route_doc(self, doc: Doc, local: str, overrides: dict[int, str], reuse: bool, persist: bool) -> Manifest:
         key = manifest_key(doc.sha256, self.route_key)
         if reuse and (existing := await self.store.get_model(key, Manifest)):
             return existing
@@ -117,7 +124,8 @@ class Router:
             segments=segment(list(pages)),
             cost_usd=round(cost[0], 6),
         )
-        await self.store.put_json(key, manifest)
+        if persist:
+            await self.store.put_json(key, manifest)
         return manifest
 
     async def _route_page(
