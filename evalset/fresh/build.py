@@ -1080,7 +1080,8 @@ def assemble(pages: list[Page]) -> list[dict]:
     for c in cases:
         if c["group"] in ("img", "ocr") and c["id"].split("_", 1)[1] in SECOND_LOOK:
             c["gt"] = ["L3", "L4"]
-    assert SECOND_LOOK <= {c["id"].split("_", 1)[1] for c in cases if c["group"] == "img"}, "second look at a lost page"
+    images = {c["id"].split("_", 1)[1] for c in cases if c["group"] == "img"}
+    assert SECOND_LOOK.issubset(images), "a second look names a page the set no longer holds"
     assert len({c["id"] for c in cases}) == len(cases), "case ids must be unique"
     digests = {hashlib.sha256(f.read_bytes()).hexdigest(): f.name for f in files.iterdir()}
     assert len(digests) == len(list(files.iterdir())), "two fresh files are identical"
