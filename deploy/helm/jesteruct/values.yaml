@@ -1,0 +1,63 @@
+image:
+  repository: ghcr.io/itssypher/jesteruct
+  tag: ""  # required: images are tagged with the git SHA
+  pullPolicy: IfNotPresent
+  pullSecrets: []  # e.g. [{name: ghcr}] for a private GHCR package
+
+# The chart creates none of its dependencies; point it at them.
+valkeyUrl: ""  # required: JST_VALKEY_URL, redis:// or rediss://, without credentials
+valkeyPassword:
+  existingSecret: ""  # Secret with the Valkey password; it must be URL-safe
+  key: password
+storeUrl: ""  # required: JST_STORE_URL, s3://, gs:// or az://
+storeConfig: {}  # JST_STORE_CONFIG, obstore settings such as {endpoint: http://seaweedfs:8333}
+storeClientOptions: {}  # JST_STORE_CLIENT_OPTIONS, such as {allow_http: "true"}
+storeCredentialsSecret: ""  # Secret whose keys become env vars (AWS_*, GOOGLE_*, AZURE_*); empty with workload identity
+
+# Must match what KEDA watches, so both come from here.
+queue:
+  stream: "jst:jobs"
+  group: workers
+
+# Any other JST_* setting from src/jesteruct/config.py. API and workers share them, so they agree on the route key.
+env:
+  JST_JEV_RPM: "1000"  # shared by every worker through the Valkey rate limiter
+
+openrouter:
+  existingSecret: ""
+  secretKey: OPENROUTER_API_KEY
+  apiKey: ""  # when set instead, the chart creates the Secret
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}  # workload identity, e.g. eks.amazonaws.com/role-arn or iam.gke.io/gcp-service-account
+
+podLabels: {}  # e.g. azure.workload.identity/use: "true"
+
+api:
+  replicas: 2
+  port: 8000
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+
+worker:
+  replicas: 1  # used only when keda.enabled is false
+  maxDocs: 2  # JST_WORKER_MAX_DOCS: documents one worker routes at a time
+  metricsPort: 9090
+  terminationGracePeriodSeconds: 600  # a worker finishes its documents before it exits
+  # The limits.cpu value sizes the probe process pool (JST_CPU_WORKERS).
+  resources:
+    requests: {cpu: "2", memory: 2Gi}
+    limits: {cpu: "2", memory: 4Gi}
+
+keda:
+  enabled: true
+  minReplicas: 0
+  # Jev allows 1,200 requests a minute (JST_JEV_RPM keeps us at 1,000), about 16 pages a second across all workers.
+  # Six workers reach that; more would only queue on the shared rate limiter.
+  maxReplicas: 6
+  cooldownSeconds: 300  # idle time before scaling to minReplicas
+  pollingInterval: 15
+  lagCount: 4  # undelivered documents per worker before another worker is added

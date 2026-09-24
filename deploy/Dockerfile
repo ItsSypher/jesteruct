@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+# One image for the API and the workers: `jst serve` (default) or `jst worker`.
+
+FROM ghcr.io/astral-sh/uv:0.11-python3.12-trixie-slim AS builder
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
+WORKDIR /app
+
+# Dependencies first, so source edits reuse this layer.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --frozen --no-dev --no-editable --no-install-project
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
+
+# RapidOCR downloads its models on first use; do that here so containers never reach out at runtime.
+RUN /app/.venv/bin/python - <<'EOF'
+import cv2
+import numpy as np
+from rapidocr import RapidOCR
+
+image = np.full((64, 320, 3), 255, np.uint8)
+cv2.putText(image, "jesteruct", (10, 44), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 0), 3)
+print("rapidocr warm-up:", RapidOCR()(image).txts)
+EOF
+
+
+FROM python:3.12-slim-trixie
+LABEL org.opencontainers.image.source=https://github.com/ItsSypher/jesteruct
+
+RUN useradd --uid 10001 --user-group --create-home --home-dir /home/jst jst
+COPY --from=builder /app/.venv /app/.venv
+
+ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    JST_OCR_BACKEND=rapid
+
+USER 10001:10001
+WORKDIR /home/jst
+EXPOSE 8000 9090
+ENTRYPOINT ["jst"]
+CMD ["serve"]

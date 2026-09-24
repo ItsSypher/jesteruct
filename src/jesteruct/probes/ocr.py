@@ -30,7 +30,7 @@ def resolve_backend(requested: str) -> str:
 def _rapid():
     from rapidocr import RapidOCR
 
-    return RapidOCR()
+    return RapidOCR(params={"Global.log_level": "warning"})
 
 
 def _apple(jpeg: bytes) -> OcrResult:
