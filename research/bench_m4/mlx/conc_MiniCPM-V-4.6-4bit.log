@@ -1,0 +1,43 @@
+INFO:     Started server process [71828]
+INFO:     Waiting for application startup.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 3187.16it/s]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8089 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53449 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53450 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53450 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53450 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53451 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53453 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53455 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53456 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53454 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53456 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53455 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53453 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53455 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53456 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53454 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53455 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53453 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53457 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53457 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53457 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53457 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53457 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53457 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [71828]
