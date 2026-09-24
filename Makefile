@@ -1,7 +1,7 @@
 SHA := $(shell git rev-parse --short HEAD)
 TF_LOCAL := terraform -chdir=infra/terraform/envs/local
 
-.PHONY: sync lint test image deploy-local smoke destroy-local
+.PHONY: sync lint test web studio studio-cluster image deploy-local smoke destroy-local
 
 sync:
 	uv sync
@@ -12,6 +12,18 @@ lint:
 
 test:
 	uv run pytest
+
+web:
+	pnpm -C web install --frozen-lockfile
+	pnpm -C web build
+
+# The Studio natively: Valkey in Docker, a worker and the API at http://localhost:8000 (Ctrl-C stops them).
+studio: web
+	scripts/studio.sh
+
+# The Studio of the OrbStack deployment (make deploy-local), at http://localhost:8000.
+studio-cluster:
+	kubectl --context orbstack -n jesteruct port-forward svc/jesteruct-api 8000:8000
 
 image:
 	docker build -f deploy/Dockerfile -t jesteruct:$(SHA) .

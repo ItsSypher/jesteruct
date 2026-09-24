@@ -168,3 +168,13 @@ variable "keda_cooldown_seconds" {
   type    = number
   default = 300
 }
+
+variable "ingress" {
+  description = "One host for the API and the Studio; an empty host creates no Ingress. tls_secret is an existing TLS Secret."
+  type = object({
+    host       = optional(string, "")
+    class_name = optional(string, "")
+    tls_secret = optional(string, "")
+  })
+  default = {}
+}
