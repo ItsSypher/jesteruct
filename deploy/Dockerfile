@@ -11,14 +11,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     uv sync --frozen --no-dev --no-editable --no-install-project
 
+# RapidOCR and the layout model download their weights on first use. Fetch them before the source is copied, so they
+# are downloaded again only when the dependencies change.
+RUN /app/.venv/bin/python - <<'EOF'
+from rapid_layout import RapidLayout
+from rapidocr import RapidOCR
+
+RapidOCR()
+RapidLayout(model_type="yolov8n_layout_general6")  # jesteruct.probes.layout.MODEL; the check below catches drift
+EOF
+
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
-# RapidOCR and the layout model download their weights on first use; do that here so containers never reach out at
-# runtime.
-RUN /app/.venv/bin/python - <<'EOF'
+# The engines as the router builds them, with the network off: containers must never reach out for weights at runtime.
+RUN --network=none /app/.venv/bin/python - <<'EOF'
 import cv2
 import numpy as np
 from rapidocr import RapidOCR
@@ -27,8 +36,8 @@ from jesteruct.probes import layout
 
 image = np.full((64, 320, 3), 255, np.uint8)
 cv2.putText(image, "jesteruct", (10, 44), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 0), 3)
-print("rapidocr warm-up:", RapidOCR()(image).txts)
-print("layout warm-up:", layout.detect(np.full((1024, 768, 3), 255, np.uint8)))
+print("rapidocr check:", RapidOCR()(image).txts)
+print("layout check:", layout.detect(np.full((1024, 768, 3), 255, np.uint8)))
 EOF
 
 
