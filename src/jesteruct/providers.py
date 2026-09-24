@@ -167,6 +167,8 @@ class OpenRouter:
                         raise ProviderRejected(str(data["error"])[:300])
                     await self._store.put_json(key, data)
                     return data, float((data.get("usage") or {}).get("cost") or 0.0)
+                if r.status_code in (401, 402, 403):  # credentials or billing: a system fault, not a page verdict
+                    raise ProviderUnavailable(f"{kind} {r.status_code}: {r.text[:300]}")
                 if r.status_code != 429 and r.status_code < 500:
                     raise ProviderRejected(f"{kind} {r.status_code}: {r.text[:300]}")
                 retry_after, error = r.headers.get("retry-after"), f"{kind} {r.status_code}"
