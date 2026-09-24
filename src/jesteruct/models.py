@@ -48,6 +48,7 @@ class TextStats(BaseModel):
     odd_char_share: float = 0.0
     short_token_share: float = 0.0
     common_word_share: float = 0.0
+    math_share: float = 0.0  # mathematical symbols and operators, as a share of the non-space characters
     script: dict[str, float] = Field(default_factory=dict)
 
 
@@ -106,6 +107,7 @@ class VisionFacts(BaseModel):
     legibility: str
     handwriting: str
     content: dict[str, bool]
+    defects: dict[str, bool] = Field(default_factory=dict)  # capture defects that make characters harder to read
     script: str
 
 

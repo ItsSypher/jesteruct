@@ -1,13 +1,16 @@
 """Evidence in words: Jev reasons well over descriptions and poorly over raw numbers.
 
 The bins and phrases are frozen at EVIDENCE_VERSION. Those of e1 were measured in bench/jev_lanes; e2 adds the layout
-sentence and the agreement of a PDF text layer with fresh OCR (issue #4). Change them only together with a version bump
-and an eval run; the version is part of every route key.
+sentence and the agreement of a PDF text layer with fresh OCR (issue #4); e3 adds mathematical symbols in the text
+layer and the vision check's capture defects, and counts formula blocks rather than formulas, which the layout model
+finds only when they are displayed (evalset/fresh). Change them only together with a version bump and an eval run; the
+version is part of every route key.
 """
 
 from .models import ImageQuality, LayoutFacts, PageEvidence, TextStats, VisionFacts
 
-EVIDENCE_VERSION = "e2"
+EVIDENCE_VERSION = "e3"
+MATH_SHARE = 0.008  # math symbols per character: born-digital L1 pages stay below 0.0052, inline-math pages reach 0.009
 TEXT_SAMPLE_CHARS = 1200
 PREVIOUS_SAMPLE_CHARS = 600
 
@@ -19,6 +22,14 @@ _SCRIPT_NAMES = {
     "other": "letters of another script",
 }
 _SCANNER_PRODUCERS = ("Tesseract", "ABBYY", "img2pdf")
+_LAYOUT_NOUNS = {"table": "table", "formula": "formula block", "figure": "figure"}
+_DEFECTS = {
+    "photocopy": "photocopy artefacts",
+    "bleed_through": "bleed-through from the reverse side",
+    "curved_page": "curved or warped paper",
+    "heavy_speckle": "heavy speckle",
+    "faded_text": "faded or broken characters",
+}
 
 
 def describe_image(q: ImageQuality) -> str:
@@ -59,6 +70,8 @@ def describe_text(st: TextStats, what: str) -> str:
         s.append("many unusual or private-use symbols")
     if st.short_token_share > 0.35:
         s.append("many one-letter fragments")
+    if st.math_share >= MATH_SHARE:
+        s.append("frequent mathematical symbols or operators")
     if st.script:
         s.append(f"mostly {_SCRIPT_NAMES[max(st.script, key=st.script.get)]}")
     return f"{what}: " + ", ".join(s) + "."
@@ -113,7 +126,7 @@ def _count(n: int, noun: str) -> str:
 def describe_layout(layout: LayoutFacts | None) -> str | None:
     if layout is None:
         return None
-    s = [_count(layout.counts.get(k, 0), k) for k in ("table", "formula", "figure")]
+    s = [_count(layout.counts.get(k, 0), noun) for k, noun in _LAYOUT_NOUNS.items()]
     if layout.area.get("figure", 0.0) >= 0.6:  # the layout model sees most scans and photos as one big figure
         s[-1] += " covering most of the page"
     return "Layout: " + ", ".join(s + _columns(layout.columns)) + "."
@@ -146,8 +159,10 @@ def describe_vision(v: VisionFacts | None) -> str:
     if v is None:
         return "Vision check: unavailable."
     flags = [k for k in ("table", "math", "form", "code", "chart", "photo") if v.content.get(k)]
+    defects = [_DEFECTS[k] for k in _DEFECTS if v.defects.get(k)]
     return (
         f"Vision check of the page image: capture looks like {v.capture}; legibility {v.legibility}; "
+        f"defects that make characters harder to read: {', '.join(defects) or 'none'}; "
         f"handwriting {v.handwriting}; contains {', '.join(flags) or 'plain text only'}; main script {v.script}."
     )
 

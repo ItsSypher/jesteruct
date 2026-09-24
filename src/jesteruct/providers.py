@@ -35,6 +35,8 @@ capture - how the image was produced:
 
 legibility - how easy the text is to read for OCR: clean, mild_issues, hard_to_read, illegible.
 
+defects - true for each defect that makes some characters harder to read: photocopy (blotchy, bleeding, broken or dithered strokes from copying), bleed_through (text or pictures from the reverse side show through), curved_page (curved, warped or folded paper, or a book spread bending into its gutter), heavy_speckle (dense dots, dirt or noise over the text), faded_text (faint, thin or broken characters). Light speckle, a paper tint, light banding or stripes, and a faint watermark behind crisp text are not defects.
+
 handwriting:
 - none: no handwriting at all.
 - annotations_only: printed page with handwritten notes, marks or signatures.
@@ -48,19 +50,26 @@ script - the main writing system of the text.
 Use "unsure" only when the image genuinely does not let you decide."""  # noqa: E501
 
 _FLAGS = ["table", "math", "form", "code", "chart", "photo"]
+_DEFECTS = ["photocopy", "bleed_through", "curved_page", "heavy_speckle", "faded_text"]
 VISION_SCHEMA = {
     "name": "page_triage",
     "strict": True,
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["capture", "legibility", "handwriting", "content", "script"],
+        "required": ["capture", "legibility", "defects", "handwriting", "content", "script"],
         "properties": {
             "capture": {
                 "type": "string",
                 "enum": ["digital_render", "flatbed_scan", "fax", "camera_photo", "screenshot", "unsure"],
             },
             "legibility": {"type": "string", "enum": ["clean", "mild_issues", "hard_to_read", "illegible", "unsure"]},
+            "defects": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": _DEFECTS,
+                "properties": {k: {"type": "boolean"} for k in _DEFECTS},
+            },
             "handwriting": {
                 "type": "string",
                 "enum": ["none", "annotations_only", "fields_filled_by_hand", "mostly_handwritten", "unsure"],

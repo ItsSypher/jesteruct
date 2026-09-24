@@ -1,7 +1,7 @@
 """Routing policy: the questions Jev answers and the rule table that turns answers into a lane.
 
-Jev answers five narrow yes/no questions better than one multi-option lane choice (0.92-0.94 vs 0.80 lane accuracy
-in bench/jev_lanes/REPORT.md), so the lane is decided here, in code, from those answers. Modifier and continuation
+Jev answers narrow yes/no questions better than one multi-option lane choice (0.92-0.94 vs 0.80 lane accuracy in
+bench/jev_lanes/REPORT.md), so the lane is decided here, in code, from those answers. Modifier and continuation
 questions ride along in the same request. Question wording is part of POLICY_VERSION.
 """
 
@@ -10,7 +10,7 @@ import json
 
 from .models import Lane, PageEvidence, PageRoute, VisionFacts
 
-POLICY_VERSION = "p1"
+POLICY_VERSION = "p2"
 
 ROUTING_QUESTIONS = {
     "text_layer_trustworthy": {
@@ -24,6 +24,13 @@ ROUTING_QUESTIONS = {
         "type": "noul",
         "instructions": "The page image is clearly degraded for text recognition: blur, strong noise, fading, stains, "
         "low contrast or warping.",
+    },
+    "capture_defects": {
+        "type": "noul",
+        "instructions": "The page image has defects that make some characters harder to read: photocopy artefacts "
+        "(blotchy, broken or dithered strokes), bleed-through from the reverse side, curved or warped paper, heavy "
+        "speckle, or faded or broken characters. Light speckle, a paper tint, light banding or a faint watermark "
+        "behind crisp text do not count.",
     },
     "complex_layout": {
         "type": "noul",
@@ -45,7 +52,7 @@ MODIFIER_QUESTIONS = {
         "criteria": [
             "Clean: flat, sharp, good contrast",
             "Mild: slight noise, tint or softness",
-            "Heavy: photo distortion, fax artefacts, strong noise or fading",
+            "Heavy: photo distortion, fax or photocopy artefacts, bleed-through, strong noise or fading",
             "Severe: large parts hard to read",
         ],
     },
@@ -89,7 +96,8 @@ def text_layer_trusted(ev: PageEvidence) -> bool:
 def _lane(a: dict[str, float]) -> tuple[Lane, float, list[str]]:
     """The rule table. Handwriting wins, then text-layer trust, then image condition."""
     hw, tl = a.get("mostly_handwritten", 0.0), a.get("text_layer_trustworthy", 0.0)
-    cx, bad = a.get("complex_layout", 0.0), max(a.get("camera_or_fax", 0.0), a.get("heavily_degraded", 0.0))
+    cx = a.get("complex_layout", 0.0)
+    bad = max(a.get(k, 0.0) for k in ("camera_or_fax", "heavily_degraded", "capture_defects"))
     if hw >= 0.5:
         return "L5", hw, [f"mostly handwritten ({hw:.2f})"]
     if tl >= 0.5:

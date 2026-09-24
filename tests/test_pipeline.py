@@ -96,8 +96,9 @@ def _sentences(evidence: str) -> list[str]:
 
 
 def _e1_part(evidence: str) -> list[str]:
-    """Evidence e2 moved the column estimate into its new layout sentence; everything else is still e1."""
-    for clause in (", text is laid out in two or more columns", ", text is in a single column"):
+    """e2 moved the column estimate into its layout sentence and e3 added the math clause; the rest is still e1."""
+    clauses = (", text is laid out in two or more columns", ", text is in a single column")
+    for clause in (*clauses, ", frequent mathematical symbols or operators"):
         evidence = evidence.replace(clause, "")
     return [s for s in _sentences(evidence) if not s.startswith("Layout:")]
 
