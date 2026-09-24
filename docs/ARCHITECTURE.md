@@ -52,6 +52,14 @@ file ──► intake ──► per page: probes ──► [OCR + vision] ──
 | Page latency, all pages | p50 3.9 s, p95 14 s (the vision call dominates) |
 | Cost | about $2.10 per 1,000 pages, nearly all vision |
 
+The same evaluation inside the Linux container, with RapidOCR in place of Apple Vision, gives:
+- 0.939 candidate accuracy;
+- 2.0% silent under-routing;
+- 4.1% sent to review.
+
+So the OCR backend does not change routing quality.
+CPU OCR is slower: about 5 s per page at p50 on image pages.
+
 `make smoke` on OrbStack Kubernetes:
 - 43 real documents went through the API.
 - KEDA took the workers from 0 to 6.
