@@ -35,6 +35,18 @@ serviceAccount:
 
 podLabels: {}  # e.g. azure.workload.identity/use: "true"
 
+# One host for the API and the Studio (the image serves it at /). The live view is Server-Sent Events at /v1/events:
+# the API asks proxies not to buffer it (X-Accel-Buffering: no), and the defaults below say the same to ingress-nginx.
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  tls: []  # e.g. [{secretName: jesteruct-tls, hosts: [jesteruct.example.com]}]
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"  # a live view stays connected
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"  # uploads up to JST_MAX_FILE_MB
+
 api:
   replicas: 2
   port: 8000

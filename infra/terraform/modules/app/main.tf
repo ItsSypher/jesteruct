@@ -83,6 +83,12 @@ resource "helm_release" "app" {
       maxReplicas     = var.keda_max_replicas
       cooldownSeconds = var.keda_cooldown_seconds
     }
+    ingress = {
+      enabled   = var.ingress.host != ""
+      className = var.ingress.class_name
+      host      = var.ingress.host
+      tls       = var.ingress.tls_secret != "" ? [{ secretName = var.ingress.tls_secret, hosts = [var.ingress.host] }] : []
+    }
   })]
 
   lifecycle {
