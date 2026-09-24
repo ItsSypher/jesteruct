@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     jev_model: str = "typesafe/jev-1.13"
     vision_model: str = "google/gemini-3.8-flash"
     jev_rpm: int = 1000  # below Jev's 1,200/min limit, shared by every replica when Valkey is configured
+    jev_batch_size: int = 1  # pages per Jev request; see docs/ARCHITECTURE.md for the measured effect
+    jev_batch_wait_ms: int = 100  # how long a partial batch waits for more pages
     vision_rpm: int = 600
     jev_timeout_s: float = 30
     vision_timeout_s: float = 90
