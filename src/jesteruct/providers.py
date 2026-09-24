@@ -11,8 +11,9 @@ import contextlib
 import hashlib
 import json
 import random
+import re
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -80,8 +81,67 @@ VISION_SCHEMA = {
 
 
 T = TypeVar("T")
+JEV_PATH = "/alpha/decisions"
 MAX_UNUSABLE = 3  # attempts with malformed output before a request counts as rejected
 _UNUSABLE = (KeyError, IndexError, TypeError, ValueError)
+_FIELD = re.compile(r"`([a-z_]+)`")
+
+
+def _digest(path: str, body: dict) -> str:
+    return hashlib.sha256(json.dumps({"path": path, "body": body}, sort_keys=True).encode()).hexdigest()
+
+
+def _raw(data: dict, key: str) -> dict:
+    return data["answers"][key]
+
+
+def _answers(data: dict, questions: dict) -> dict[str, float]:
+    out = {}
+    for key, spec in questions.items():
+        a = _raw(data, key)
+        out[key] = float(a["noul"] if spec["type"] == "noul" else a["score"])
+    return out
+
+
+def _scoped(i: int, spec: dict) -> dict:
+    """A question about page i of a batched request: field references and the question itself point at page i."""
+    instructions = _FIELD.sub(lambda m: f"`p{i}_{m.group(1)}`", spec["instructions"])
+    return {**spec, "instructions": f"About page p{i} only (the state fields that start with `p{i}_`): {instructions}"}
+
+
+@dataclass
+class _Pending:
+    state: dict[str, str]
+    questions: dict
+    key: str  # this page's own cache key
+    future: asyncio.Future
+
+
+class _Batcher:
+    """Coalesces concurrent decisions into requests of up to `size` pages, waiting at most `wait_s` to fill one."""
+
+    def __init__(self, send: Callable[[list[_Pending]], Awaitable[None]], size: int, wait_s: float):
+        self._send, self._size, self._wait = send, size, wait_s
+        self._pending: list[_Pending] = []
+        self._timer: asyncio.TimerHandle | None = None
+        self._inflight: set[asyncio.Task] = set()
+
+    def add(self, pending: _Pending) -> None:
+        self._pending.append(pending)
+        if len(self._pending) >= self._size:
+            self._flush()
+        elif self._timer is None:
+            self._timer = asyncio.get_running_loop().call_later(self._wait, self._flush)
+
+    def _flush(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        while self._pending:
+            batch, self._pending = self._pending[: self._size], self._pending[self._size :]
+            task = asyncio.create_task(self._send(batch))
+            self._inflight.add(task)
+            task.add_done_callback(self._inflight.discard)
 
 
 class ProviderRejected(Exception):
@@ -112,20 +172,54 @@ class OpenRouter:
         self._limiter = limiter
         self._client = client
         self._headers = {"Authorization": f"Bearer {settings.openrouter_api_key.get_secret_value()}"}
+        self._batcher = _Batcher(self._decide_batch, settings.jev_batch_size, settings.jev_batch_wait_ms / 1000)
 
     async def decide(self, state: dict[str, str], questions: dict) -> Decision:
-        def parse(data: dict) -> dict[str, float]:
-            answers = {}
-            for key, spec in questions.items():
-                a = data["answers"][key]
-                answers[key] = float(a["noul"] if spec["type"] == "noul" else a["score"])
-            return answers
-
         body = {"model": self._s.jev_model, "state": state, "questions": questions}
+        if self._s.jev_batch_size > 1:
+            key = cache_key("jev", _digest(JEV_PATH, {**body, "batch": self._s.jev_batch_size}))
+            pending = _Pending(state, questions, key, asyncio.get_running_loop().create_future())
+            self._batcher.add(pending)
+            return await pending.future
         answers, data, cost = await self._call(
-            "jev", "/alpha/decisions", body, self._s.jev_timeout_s, self._s.jev_rpm, parse
+            "jev", JEV_PATH, body, self._s.jev_timeout_s, self._s.jev_rpm, lambda d: _answers(d, questions)
         )
         return Decision(answers=answers, model=data.get("model"), cost=cost)
+
+    async def _decide_batch(self, pages: list["_Pending"]) -> None:
+        """One Jev request for several pages. Each page's answers are cached under its own key, so a replay does
+        not depend on which pages happened to share a request."""
+        todo = []
+        for p in pages:
+            cached = await self._store.get_json(p.key)
+            try:
+                p.future.set_result(Decision(answers=_answers(cached, p.questions), model=cached.get("model"), cost=0))
+            except (*_UNUSABLE, AttributeError):
+                todo.append(p)
+        if not todo:
+            return
+        state = {f"p{i}_{k}": v for i, p in enumerate(todo) for k, v in p.state.items()}
+        questions = {f"p{i}_{q}": _scoped(i, spec) for i, p in enumerate(todo) for q, spec in p.questions.items()}
+        body = {"model": self._s.jev_model, "state": state, "questions": questions}
+        try:
+            answers, data, cost = await self._call(
+                "jev",
+                JEV_PATH,
+                body,
+                self._s.jev_timeout_s,
+                self._s.jev_rpm,
+                lambda d: _answers(d, questions),
+                cache=False,
+            )
+        except Exception as e:
+            for p in todo:
+                p.future.set_exception(e)
+            return
+        for i, p in enumerate(todo):
+            mine = {q: answers[f"p{i}_{q}"] for q in p.questions}
+            record = {"model": data.get("model"), "answers": {q: _raw(data, f"p{i}_{q}") for q in p.questions}}
+            await self._store.put_json(p.key, record)
+            p.future.set_result(Decision(answers=mine, model=data.get("model"), cost=cost / len(todo)))
 
     async def vision(self, jpeg: bytes) -> Vision:
         image = base64.b64encode(jpeg).decode()
@@ -155,16 +249,22 @@ class OpenRouter:
         return Vision(facts=facts, cost=cost)
 
     async def _call(
-        self, kind: str, path: str, body: dict, timeout: float, rpm: int, parse: Callable[[dict], T]
+        self,
+        kind: str,
+        path: str,
+        body: dict,
+        timeout: float,
+        rpm: int,
+        parse: Callable[[dict], T],
+        cache: bool = True,
     ) -> tuple[T, dict, float]:
         """POST with cache, shared rate limit, retries and a deadline.
 
         Only responses that `parse` accepts are cached; unusable output (truncated JSON, missing answers) is retried
         a few times before the request counts as rejected. Returns (parsed value, raw response, cost spent).
         """
-        digest = hashlib.sha256(json.dumps({"path": path, "body": body}, sort_keys=True).encode()).hexdigest()
-        key = cache_key(kind, digest)
-        if (cached := await self._store.get_json(key)) is not None:
+        key = cache_key(kind, _digest(path, body)) if cache else None
+        if key and (cached := await self._store.get_json(key)) is not None:
             with contextlib.suppress(*_UNUSABLE):  # an unusable cached answer is fetched again
                 return parse(cached), cached, 0.0
         deadline = time.monotonic() + 4 * timeout
@@ -194,7 +294,8 @@ class OpenRouter:
                         if unusable >= MAX_UNUSABLE:
                             raise ProviderRejected(f"{kind} returned unusable output {unusable} times: {e}") from e
                         continue
-                    await self._store.put_json(key, data)
+                    if key:
+                        await self._store.put_json(key, data)
                     return value, data, spent
                 if r.status_code in (401, 402, 403):  # credentials or billing: a system fault, not a page verdict
                     raise ProviderUnavailable(f"{kind} {r.status_code}: {r.text[:300]}")

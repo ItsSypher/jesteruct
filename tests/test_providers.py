@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 
 import httpx
@@ -12,14 +13,14 @@ from jesteruct.store import Store
 QUESTIONS = {"text_layer_trustworthy": {"type": "noul", "instructions": "..."}}
 
 
-def provider(tmp_path: Path, handler) -> tuple[OpenRouter, list[httpx.Request]]:
+def provider(tmp_path: Path, handler, **settings_kw) -> tuple[OpenRouter, list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
     def record(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         return handler(request)
 
-    settings = Settings(openrouter_api_key="k", jev_timeout_s=0.5)
+    settings = Settings(openrouter_api_key="k", jev_timeout_s=0.5, **settings_kw)
     client = httpx.AsyncClient(transport=httpx.MockTransport(record))
     return OpenRouter(settings, Store(f"file://{tmp_path}"), LocalLimiter(), client), seen
 
@@ -61,3 +62,27 @@ def test_transient_errors_give_up_after_the_deadline(tmp_path):
     with pytest.raises(ProviderUnavailable):
         asyncio.run(p.decide({"page_evidence": "x"}, QUESTIONS))
     assert len(seen) >= 1
+
+
+def test_batched_decisions_share_one_request_and_cache_per_page(tmp_path):
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert set(body["state"]) == {"p0_page_evidence", "p1_page_evidence"}
+        assert body["questions"]["p1_text_layer_trustworthy"]["instructions"].startswith("About page p1 only")
+        answers = {k: {"noul": 0.1 if k.startswith("p0") else 0.9} for k in body["questions"]}
+        return httpx.Response(200, json={"answers": answers})
+
+    p, seen = provider(tmp_path, answer, jev_batch_size=2)
+
+    async def both():
+        return await asyncio.gather(
+            p.decide({"page_evidence": "a"}, QUESTIONS), p.decide({"page_evidence": "b"}, QUESTIONS)
+        )
+
+    first, second = asyncio.run(both())
+    assert first.answers == {"text_layer_trustworthy": 0.1}
+    assert second.answers == {"text_layer_trustworthy": 0.9}
+    assert len(seen) == 1
+    again = asyncio.run(both())  # each page's answers were cached on their own
+    assert [d.answers for d in again] == [first.answers, second.answers]
+    assert len(seen) == 1

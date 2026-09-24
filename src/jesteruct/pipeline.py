@@ -44,6 +44,7 @@ def route_key(settings: Settings) -> str:
         "vision": settings.vision_model,
         "ocr": resolve_backend(settings.ocr_backend),
         "review": settings.review_threshold,
+        "jev_batch": settings.jev_batch_size,
     }
     return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:16]
 
