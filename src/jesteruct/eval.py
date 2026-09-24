@@ -52,7 +52,7 @@ def _percentile(values: list[int], q: float) -> int:
 def _metrics(rows: list[dict]) -> dict:
     n = len(rows)
     if n == 0:
-        return dict.fromkeys(_METRIC_COLUMNS, 0)
+        return {**dict.fromkeys(_METRIC_COLUMNS, 0), "confusion": {}}
     under = over = 0
     for row in rows:
         gt_ranks = [LANE_RANK[g] for g in row["gt"] if g in LANE_RANK]
