@@ -1,0 +1,44 @@
+# secrets
+.env
+*.tfvars
+!*.example.tfvars
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# local runtime output
+out/
+.cache/
+.jst/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl.bak
+crash.log
+
+# experiment scratch (reports, scripts and labels stay tracked)
+.firecrawl/
+bench/**/raw/
+bench/**/results/
+bench/**/results_run2/
+bench/**/vlm_cache/
+bench/**/__pycache__/
+bench/**/*.log
+bench/**/ledger.json
+bench/**/credits_before.json
+bench/jev_lanes/pages/
+bench/vision_bakeoff/data/pages/
+bench/vision_bakeoff/data/contact_sheets/
+
+# os
+.DS_Store
