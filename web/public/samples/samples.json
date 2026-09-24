@@ -1,0 +1,142 @@
+[
+  {
+    "file": "born-digital-report.pdf",
+    "title": "Born-digital report",
+    "lanes": [
+      "L1"
+    ],
+    "shows": "A text layer made with the document: the cheap rule trusts it, so OCR and vision are skipped.",
+    "source": "olmOCR-Bench (allenai/olmOCR-bench), ODC-By 1.0"
+  },
+  {
+    "file": "math-paper.pdf",
+    "title": "Paper with equations",
+    "lanes": [
+      "L2"
+    ],
+    "shows": "Born-digital, but full of mathematical notation, which needs a math-aware lane.",
+    "source": "olmOCR-Bench (allenai/olmOCR-bench), ODC-By 1.0"
+  },
+  {
+    "file": "source-listing.pdf",
+    "title": "Source listing",
+    "lanes": [
+      "L2"
+    ],
+    "shows": "A monospaced code page: complex layout although the text layer is clean.",
+    "source": "Own construction; CPython source under the PSF License"
+  },
+  {
+    "file": "bank-report-clean.jpg",
+    "title": "Clean scan",
+    "lanes": [
+      "L3"
+    ],
+    "shows": "An image with no text layer, sharp and flat: OCR will read it as it is.",
+    "source": "PureDocBench (zhihengli-casia/puredocbench), CC BY 4.0"
+  },
+  {
+    "file": "bank-report-banded.jpg",
+    "title": "Mildly degraded copy",
+    "lanes": [
+      "L4"
+    ],
+    "shows": "The same page with light digital degradation. Borderline between L3 and L4, so review may catch it.",
+    "source": "PureDocBench (zhihengli-casia/puredocbench), CC BY 4.0"
+  },
+  {
+    "file": "bank-report-photo.jpg",
+    "title": "Photographed printout",
+    "lanes": [
+      "L4"
+    ],
+    "shows": "The same page again, photographed on a desk: a degraded capture.",
+    "source": "PureDocBench (zhihengli-casia/puredocbench), CC BY 4.0"
+  },
+  {
+    "file": "notice-board-photo.jpg",
+    "title": "Camera photo",
+    "lanes": [
+      "L4"
+    ],
+    "shows": "A synthetic phone photo: perspective, vignette and blur.",
+    "source": "Own construction"
+  },
+  {
+    "file": "memo-fax.jpg",
+    "title": "Fax",
+    "lanes": [
+      "L4"
+    ],
+    "shows": "A synthetic fax: dithered, skewed and speckled.",
+    "source": "Own construction"
+  },
+  {
+    "file": "handwritten-notes.jpg",
+    "title": "Handwriting",
+    "lanes": [
+      "L5"
+    ],
+    "shows": "A photo of handwritten notes: the vision check sees handwriting, Jev routes it to L5.",
+    "source": "GNHK (GoodNotes), CC BY 4.0"
+  },
+  {
+    "file": "arabic-lesson.jpg",
+    "title": "Arabic page",
+    "lanes": [
+      "L3"
+    ],
+    "shows": "A clean page in Arabic script: the script and right-to-left modifiers ride along with the lane.",
+    "source": "HumynLabs Arabic Documents, CC BY 4.0"
+  },
+  {
+    "file": "mixed-report.pdf",
+    "title": "Three-page PDF",
+    "lanes": [
+      "L1",
+      "L2",
+      "L4"
+    ],
+    "shows": "A born-digital page, a table page and a faxed page with an old OCR layer: three segments in one manifest.",
+    "source": "olmOCR-Bench (allenai/olmOCR-bench), ODC-By 1.0; Own construction"
+  },
+  {
+    "file": "meeting-notes.docx",
+    "title": "Word document",
+    "lanes": [
+      "L0"
+    ],
+    "shows": "A native office file: no rendering needed, so it goes straight to L0.",
+    "source": "Own construction"
+  },
+  {
+    "file": "scans-bundle.zip",
+    "title": "Zip archive",
+    "lanes": [
+      "L4",
+      "L3",
+      "L0"
+    ],
+    "shows": "A container: intake expands it, and each file inside is routed as its own document.",
+    "source": "Own construction"
+  },
+  {
+    "file": "newsletter-email.eml",
+    "title": "Email with attachment",
+    "lanes": [
+      "L0",
+      "L2"
+    ],
+    "shows": "The body text is native (L0); the attached two-column PDF is routed on its own.",
+    "source": "Own construction; attachment from olmOCR-Bench (allenai/olmOCR-bench), ODC-By 1.0"
+  },
+  {
+    "file": "locked.pdf",
+    "title": "Encrypted PDF",
+    "lanes": [
+      "LQ"
+    ],
+    "shows": "Password protected, so intake quarantines it with a reason instead of guessing.",
+    "source": "Own construction"
+  }
+]
