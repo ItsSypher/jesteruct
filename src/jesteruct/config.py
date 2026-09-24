@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     max_deliveries: int = 3
     max_backlog: int = 1000
     claim_idle_s: int = 120
+    web_dir: str | None = None  # the built Studio (web/dist); the API serves it at / when set
 
     @property
     def cpu_count(self) -> int:
