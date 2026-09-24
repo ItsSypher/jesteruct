@@ -7,11 +7,14 @@ retried later); a request the provider rejects raises ProviderRejected (that pag
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import json
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeVar
 
 import httpx
 
@@ -76,6 +79,11 @@ VISION_SCHEMA = {
 }
 
 
+T = TypeVar("T")
+MAX_UNUSABLE = 3  # attempts with malformed output before a request counts as rejected
+_UNUSABLE = (KeyError, IndexError, TypeError, ValueError)
+
+
 class ProviderRejected(Exception):
     """The provider refused this request (4xx, invalid output). Retrying will not help."""
 
@@ -106,15 +114,17 @@ class OpenRouter:
         self._headers = {"Authorization": f"Bearer {settings.openrouter_api_key.get_secret_value()}"}
 
     async def decide(self, state: dict[str, str], questions: dict) -> Decision:
+        def parse(data: dict) -> dict[str, float]:
+            answers = {}
+            for key, spec in questions.items():
+                a = data["answers"][key]
+                answers[key] = float(a["noul"] if spec["type"] == "noul" else a["score"])
+            return answers
+
         body = {"model": self._s.jev_model, "state": state, "questions": questions}
-        data, cost = await self._call("jev", "/alpha/decisions", body, self._s.jev_timeout_s, self._s.jev_rpm)
-        answers: dict[str, float] = {}
-        for key, spec in questions.items():
-            a = (data.get("answers") or {}).get(key) or {}
-            value = a.get("noul") if spec["type"] == "noul" else a.get("score")
-            if value is None:
-                raise ProviderRejected(f"jev returned no answer for {key}")
-            answers[key] = float(value)
+        answers, data, cost = await self._call(
+            "jev", "/alpha/decisions", body, self._s.jev_timeout_s, self._s.jev_rpm, parse
+        )
         return Decision(answers=answers, model=data.get("model"), cost=cost)
 
     async def vision(self, jpeg: bytes) -> Vision:
@@ -135,23 +145,31 @@ class OpenRouter:
             "provider": {"require_parameters": True},
             "usage": {"include": True},
         }
-        data, cost = await self._call(
-            "vision", "/v1/chat/completions", body, self._s.vision_timeout_s, self._s.vision_rpm
-        )
-        try:
-            content = data["choices"][0]["message"]["content"]
-            return Vision(facts=VisionFacts.model_validate_json(content), cost=cost)
-        except (KeyError, IndexError, TypeError, ValueError) as e:
-            raise ProviderRejected(f"vision returned unusable output: {e}") from e
 
-    async def _call(self, kind: str, path: str, body: dict, timeout: float, rpm: int) -> tuple[dict, float]:
-        """POST with cache, shared rate limit, retries and a deadline. Returns (response, cost of this call)."""
+        def parse(data: dict) -> VisionFacts:
+            return VisionFacts.model_validate_json(data["choices"][0]["message"]["content"])
+
+        facts, _, cost = await self._call(
+            "vision", "/v1/chat/completions", body, self._s.vision_timeout_s, self._s.vision_rpm, parse
+        )
+        return Vision(facts=facts, cost=cost)
+
+    async def _call(
+        self, kind: str, path: str, body: dict, timeout: float, rpm: int, parse: Callable[[dict], T]
+    ) -> tuple[T, dict, float]:
+        """POST with cache, shared rate limit, retries and a deadline.
+
+        Only responses that `parse` accepts are cached; unusable output (truncated JSON, missing answers) is retried
+        a few times before the request counts as rejected. Returns (parsed value, raw response, cost spent).
+        """
         digest = hashlib.sha256(json.dumps({"path": path, "body": body}, sort_keys=True).encode()).hexdigest()
         key = cache_key(kind, digest)
         if (cached := await self._store.get_json(key)) is not None:
-            return cached, 0.0
+            with contextlib.suppress(*_UNUSABLE):  # an unusable cached answer is fetched again
+                return parse(cached), cached, 0.0
         deadline = time.monotonic() + 4 * timeout
-        attempt = 0
+        attempt = unusable = 0
+        spent = 0.0
         while True:
             await self._limiter.acquire(kind, rpm)
             try:
@@ -162,11 +180,22 @@ class OpenRouter:
                 retry_after, error = None, repr(e)
             else:
                 if r.status_code == 200:
-                    data = r.json()
+                    try:
+                        data = r.json()
+                    except ValueError:
+                        data = {}
                     if data.get("error"):
                         raise ProviderRejected(str(data["error"])[:300])
+                    spent += float((data.get("usage") or {}).get("cost") or 0.0)
+                    try:
+                        value = parse(data)
+                    except _UNUSABLE as e:
+                        unusable += 1
+                        if unusable >= MAX_UNUSABLE:
+                            raise ProviderRejected(f"{kind} returned unusable output {unusable} times: {e}") from e
+                        continue
                     await self._store.put_json(key, data)
-                    return data, float((data.get("usage") or {}).get("cost") or 0.0)
+                    return value, data, spent
                 if r.status_code in (401, 402, 403):  # credentials or billing: a system fault, not a page verdict
                     raise ProviderUnavailable(f"{kind} {r.status_code}: {r.text[:300]}")
                 if r.status_code != 429 and r.status_code < 500:

@@ -47,6 +47,15 @@ def test_status_classification(tmp_path, status, error):
         asyncio.run(p.decide({"page_evidence": "x"}, QUESTIONS))
 
 
+def test_unusable_output_is_retried_and_never_cached(tmp_path):
+    good = {"answers": {"text_layer_trustworthy": {"noul": 0.9}}}
+    replies = iter([{"answers": {}}, {"choices": None}, good])
+    p, seen = provider(tmp_path, lambda r: httpx.Response(200, json=next(replies)))
+    assert asyncio.run(p.decide({"page_evidence": "x"}, QUESTIONS)).answers == {"text_layer_trustworthy": 0.9}
+    assert len(seen) == 3
+    assert asyncio.run(p.decide({"page_evidence": "x"}, QUESTIONS)).cost == 0.0  # the good answer was cached
+
+
 def test_transient_errors_give_up_after_the_deadline(tmp_path):
     p, seen = provider(tmp_path, lambda r: httpx.Response(503))
     with pytest.raises(ProviderUnavailable):

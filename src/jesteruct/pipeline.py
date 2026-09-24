@@ -139,7 +139,7 @@ class Router:
         i = ref.index
         async with self._pages:
             timings: dict[str, int] = {}
-            t = time.perf_counter()
+            start = t = time.perf_counter()
             try:
                 ev, jpeg = await self._probe(ref, override)
             except Exception as e:  # probe crashed or timed out twice: the page cannot be measured
@@ -175,7 +175,7 @@ class Router:
             route = policy.route_page(i, decision.answers, ev, vision, self.settings.review_threshold)
             route.reasons.extend(reasons)
             route.thumb_key = thumb_key(doc.sha256, i)
-            route.timings_ms = timings
+            route.timings_ms = {**timings, "total": _ms(start)}  # OCR and vision overlap, so stages don't sum to total
             return route
 
     async def _read_and_look(
