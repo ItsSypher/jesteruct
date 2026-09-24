@@ -46,15 +46,15 @@ file ──► intake ──► per page: probes ──► [OCR + vision] ──
 
 ## Measured
 
-`jst evaluate` on both labelled sets with the shipped settings: evidence e3, policy p2, one page per Jev request and calibration `c2-b03cd4ae3d` (M4 laptop, Apple Vision OCR, Gemini 3.8 Flash, 2026-09-24).
+`jst evaluate` on both labelled sets with the shipped settings: evidence e3, policy p3, one page per Jev request and calibration `c2-b7e43e4002` (M4 laptop, Apple Vision OCR, Gemini 3.8 Flash, 2026-09-24).
 `evalset/` holds the 98 cases the evidence was first tuned on; `evalset/fresh/` holds 396 cases labelled later from nine public benchmarks, disjoint from the first.
 
 | Metric | `evalset/` | `evalset/fresh/` |
 |---|---|---|
-| Candidate lane right | 0.959 | 0.934 |
-| Sent to review (LH) | 11.2% | 16.9% |
-| Silent wrong lane (kept, and wrong) | 0.0% | 1.3% |
-| Silent under-routing (kept, and too weak) | 0.0% | 0.8% |
+| Candidate lane right | 0.959 | 0.939 |
+| Sent to review (LH) | 10.2% | 15.9% |
+| Silent wrong lane (kept, and wrong) | 0.0% | 1.0% |
+| Silent under-routing (kept, and too weak) | 0.0% | 0.3% |
 | Page latency, born-digital PDF | p50 0.4 s | p50 0.4 s |
 | Page latency, all pages | p50 5.4 s, p95 14 s | p50 5.1 s, p95 14 s |
 | Cost per 1,000 pages | about $2.80 | about $2.70 |
@@ -106,13 +106,14 @@ Version e3 closes the gaps the fresh set exposed:
 - Inline mathematics.
   The layout model finds only displayed formulas, so e2's "no formulas" talked Jev out of L2 on pages full of inline notation.
   e3 says "formula blocks", and adds a clause when mathematical symbols pass 8 in every 1,000 characters; born-digital L1 pages stay below 5.2.
+  Jev then recognised the notation (`has_math`) but still read the equations of `complex_layout` as displayed ones, so policy p3 sends a page with mathematical notation to L2 as well.
 - Degraded flatbed scans.
   Photocopies, bleed-through and book spreads were called flatbed scans with mild issues, and went to L3.
   The vision check now names the defects that make characters harder to read, and Jev answers a matching `capture_defects` question (policy p2).
 
-Born-digital pages improved on both sets: 15 to 16 of 17 right on `evalset/`, and 76 to 79 of 88 on the fresh set.
+Born-digital pages improved on both sets: 15 to 16 of 17 right on `evalset/`, and 76 to 82 of 88 on the fresh set.
 On vision-checked pages the fresh set's too-weak candidates fell from 17 to 8 of 308, while `evalset/` lost 3 of 81; e2 was perfect there, having been tuned on it.
-Across all 494 labelled pages, 464 candidate lanes are right against 458, and too-weak candidates fall from 28 to 16.
+Across all 494 labelled pages, 466 candidate lanes are right against 458, and too-weak candidates fall from 28 to 12.
 
 **3. A small layout model, not a large one.**
 The projection-profile column estimate e1 used read slide bullets as columns.
@@ -149,7 +150,7 @@ One page per request is the only setting where a route depends on nothing but it
 Past 16 pages a second, the clean lever is a higher Jev limit; batching is there for bulk backfills that can give up about two points of accuracy (0.959 on average at 2 or 4 pages, against 0.980).
 
 **7. Review comes from calibrated probabilities.**
-Jev never abstains, and the product of its answers along the rule path is not a probability: at a raw threshold of 0.5, review caught only 4 of the 26 wrong candidate lanes on the fresh set.
+Jev never abstains, and the product of its answers along the rule path is not a probability: at a raw threshold of 0.5, review caught only 5 of the 24 wrong candidate lanes on the fresh set.
 `calibrate.py` fits an isotonic curve per candidate lane on `jst evaluate` results, mapping that product to the probability that the lane is right.
 Review is the cheaper choice when the probability is below 1 - 1/r, where r is what one silent wrong lane costs in reviews.
 The shipped calibration uses r = 10, so pages below 0.9 go to LH (issue #3).
@@ -160,9 +161,9 @@ Fitted on the fresh set and checked on `evalset/`:
 | Raw product below 0.5 | 2.0% | 4.1% | 1.0% |
 | Calibrated, r = 5 | 7.1% | 2.0% | 0.0% |
 | Calibrated, r = 10 (shipped) | 10.2% | 1.0% | 0.0% |
-| Calibrated, r = 20 | 14.3% | 0.0% | 0.0% |
+| Calibrated, r = 20 | 17.3% | 0.0% | 0.0% |
 
-Per-lane curves sent fewer pages to review than one curve for all lanes, for the same or fewer errors, at every r (10.2% against 15.3% at r = 10).
+Per-lane curves sent fewer pages to review than one curve for all lanes, for the same or fewer errors, at every r (10.2% against 16.3% at r = 10).
 `jst calibrate --cost-ratio` refits for a different trade-off.
 A calibration records the answer basis it was fitted on: evidence and policy versions, question set, models and batch size.
 The router applies it only on the same basis and otherwise falls back to `review_threshold` with a warning, so an evidence change never runs under a stale curve.
