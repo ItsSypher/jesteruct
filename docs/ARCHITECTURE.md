@@ -52,6 +52,12 @@ file ──► intake ──► per page: probes ──► [OCR + vision] ──
 | Page latency, all pages | p50 3.9 s, p95 14 s (the vision call dominates) |
 | Cost | about $2.10 per 1,000 pages, nearly all vision |
 
+`make smoke` on OrbStack Kubernetes:
+- 43 real documents went through the API.
+- KEDA took the workers from 0 to 6.
+- A worker killed mid-job without a grace period had its jobs reclaimed.
+- All 43 jobs finished, with 0 dead letters.
+
 ## Runtime
 
 One library, two ways to run it.
@@ -136,6 +142,10 @@ The backend is part of the route key.
 Storage is addressed by URL (`s3://`, `gs://`, `az://`, `file://`), and Valkey is any Redis-protocol service.
 The charts know nothing about where those come from.
 Terraform deploys onto any kubeconfig; creating the cluster itself is left to each cloud.
+
+Constraints:
+- Valkey must run without cluster mode, because the queue's scripts touch the job hash and the stream together.
+- The local environment passes the OpenRouter key to Terraform, so its gitignored state file holds it. Cloud environments reference an existing secret instead.
 
 **14. Deliberately not in v1:**
 - lane executors (the processing itself);
