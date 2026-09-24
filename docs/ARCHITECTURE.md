@@ -228,6 +228,13 @@ Each API process reads the stream once and fans it out at `GET /v1/events`, repl
 Server-Sent Events rather than WebSockets, because the flow is one way, it is plain HTTP through any ingress, and browsers reconnect and resume on their own.
 Events are advisory: emitting is one XADD, a failure to emit is logged and never fails a job, and events never carry page text.
 
-**17. Deliberately not in v1:**
+**17. The Studio is static files that the API serves.**
+It is built into the same image and served at `/` from `JST_WEB_DIR`, so there is one origin, no CORS and nothing new to deploy or scale; an Ingress (optional in the chart) exposes both.
+It is Svelte 5 with no component library, and the flow is drawn by hand-written WGSL on WebGPU in two instanced draws a frame, falling back to Canvas 2D when WebGPU is missing or its device is lost.
+Text and controls are HTML over the canvas, so they stay crisp and accessible.
+Measured in headless Chrome during a demo: 0.07 ms of script per frame at p50 with WebGPU (0.10 ms with Canvas 2D), 17.7 ms frame interval at p99, and 36 kB of JavaScript gzipped.
+The flow is fed by the event stream of decision 16; a document routed before is replayed from its manifest's recorded timings, and with no API it replays a recorded demo.
+
+**18. Deliberately not in v1:**
 - lane executors (the processing itself);
 - a learned router: Jev is the classifier, and its terms bar training on its outputs.

@@ -12,5 +12,6 @@ Per-case attribution is in `cases.jsonl` (`source` field); this table groups by 
 | HumynLabs Arabic PDFs (`HumynLabs/Arabic_Documents_Dataset_PDF`) | CC BY 4.0 | 3 | 3 image inputs, from a freely distributed Arabic teaching text |
 | Synthetic (own construction; two code pages carry CPython stdlib source under the PSF License) | Own construction / PSF License | 12 | 9 image inputs (fax, screenshot, camera-photo and rotated simulations, plus two rendered code pages), 2 PDF code-page inputs, 1 OCR-wrapped |
 
-This set is for internal evaluation only.
-It is not redistributed outside this repository, and none of it is used to train or fine-tune a model.
+This set is for internal evaluation.
+A few of its pages, all under ODC-By 1.0, CC BY 4.0 or the PSF License, ship as the Studio's demo samples (`web/public/samples/`), with their attribution in `samples.json`.
+Nothing else is redistributed outside this repository, and none of it is used to train or fine-tune a model.
