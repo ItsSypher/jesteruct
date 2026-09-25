@@ -39,10 +39,14 @@ return 1
 """
 
 
+# Longer than any blocking read: redis-py 8 defaults to 5 s, which cut every idle read of the event pump short.
+SOCKET_TIMEOUT_S = 3 * events.BLOCK_MS / 1000
+
+
 def connect(settings: Settings) -> Redis:
     if not settings.valkey_url:
         raise ValueError("JST_VALKEY_URL is required for the API and workers")
-    return Redis.from_url(settings.valkey_url, decode_responses=True)
+    return Redis.from_url(settings.valkey_url, decode_responses=True, socket_timeout=SOCKET_TIMEOUT_S)
 
 
 def job_hash(job_id: str) -> str:
