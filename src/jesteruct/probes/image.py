@@ -1,6 +1,8 @@
-"""Page images: one 1024 px JPEG per page (what the vision model sees), image-quality measures and a thumbnail."""
+"""Page images: one 1024 px JPEG per page (what the vision model sees), image-quality measures, a thumbnail, and a
+full-resolution view for people."""
 
 import io
+import threading
 
 import cv2
 import numpy as np
@@ -15,6 +17,9 @@ cv2.setNumThreads(1)  # parallelism comes from the process pool
 
 LONG_SIDE = 1024
 THUMB_SIDE = 320
+VIEW_SIDE = 2400  # a PDF page shown to a person: A4 at about 290 dpi
+VIEW_IMAGE_SIDE = 4096  # an image file is shown at its own resolution, up to this
+_VIEW_LOCK = threading.Lock()  # the API renders views in threads, and pdfium is not thread-safe
 
 
 def _jpeg(img: Image.Image, quality: int = 90) -> bytes:
@@ -37,6 +42,24 @@ def image_page(path: str, index: int) -> bytes:
         frame = ImageOps.exif_transpose(img.convert("RGB"))
         frame.thumbnail((LONG_SIDE, LONG_SIDE), Image.Resampling.LANCZOS)
         return _jpeg(frame)
+
+
+def page_view(document: bytes, index: int) -> bytes:
+    """One page at the best resolution worth showing a person, from the document's own bytes. Raises IndexError,
+    EOFError or OSError when there is no such page or the bytes are not a PDF or an image."""
+    with _VIEW_LOCK:
+        if document.startswith(b"%PDF-"):
+            pdf = pdfium.PdfDocument(document)
+            if not 0 <= index < len(pdf):
+                raise IndexError(f"no page {index}")
+            page = pdf[index]
+            w, h = page.get_size()
+            return _jpeg(page.render(scale=VIEW_SIDE / max(w, h)).to_pil(), quality=88)
+        with Image.open(io.BytesIO(document)) as img:
+            img.seek(index)
+            frame = ImageOps.exif_transpose(img.convert("RGB"))
+            frame.thumbnail((VIEW_IMAGE_SIDE, VIEW_IMAGE_SIDE), Image.Resampling.LANCZOS)
+            return _jpeg(frame, quality=88)
 
 
 def thumbnail(jpeg: bytes) -> bytes:

@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import io
 import json
 import shutil
 import socket
@@ -13,16 +14,18 @@ from pathlib import Path
 import pytest
 import redis
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from jesteruct.api import create_app
 from jesteruct.config import Settings
 from jesteruct.events import NO_EVENTS, STREAM, Events, Hub, valkey_sink
 from jesteruct.models import Doc, JobIndex, Manifest, PageRoute, Segment, Versions
 from jesteruct.queue import DEAD, JobQueue, connect
-from jesteruct.store import Store, input_key, job_key, manifest_key
+from jesteruct.store import Store, input_key, job_key, manifest_key, view_key
 from jesteruct.worker import consume, process
 
 DOC_SHA = "d" * 64
+FILES = Path(__file__).parents[1] / "evalset" / "files"
 
 
 @pytest.fixture(scope="module")
@@ -290,3 +293,18 @@ def test_api_submit_is_idempotent(settings, tmp_path):
         assert len(info["questions"]["degradation"]["criteria"]) == 4  # the score's scale, for the Studio's labels
         assert client.get("/readyz").status_code == 200
         assert "<title>Studio</title>" in client.get("/").text  # the Studio, behind the API routes
+
+
+def test_api_serves_each_page_at_full_resolution_and_keeps_it(settings):
+    with TestClient(create_app(settings)) as client:
+        for name, long_side in (("pdf_code_01.pdf", 2400), ("img_arabic_01.jpg", None)):
+            data = (FILES / name).read_bytes()
+            sha = hashlib.sha256(data).hexdigest()
+            assert client.post("/v1/jobs", files={"file": (name, data)}).status_code == 202  # the API stores it
+            view = client.get(f"/v1/pages/{sha}/0")
+            assert view.status_code == 200 and view.headers["content-type"] == "image/jpeg"
+            size = Image.open(io.BytesIO(view.content)).size
+            assert max(size) == (long_side or max(Image.open(FILES / name).size))  # an image keeps its own size
+            assert asyncio.run(Store.from_settings(settings).exists(view_key(sha, 0)))  # rendered once, then kept
+            assert client.get(f"/v1/pages/{sha}/7").status_code == 404
+        assert client.get(f"/v1/pages/{DOC_SHA}/0").status_code == 404  # bytes never stored

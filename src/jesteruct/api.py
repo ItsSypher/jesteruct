@@ -19,13 +19,13 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from . import __version__, policy
+from . import __version__, policy, probes
 from .config import Settings, get_settings
 from .events import Events, Hub, sse, valkey_sink
 from .evidence import EVIDENCE_VERSION
 from .models import LANES, JobIndex
 from .queue import JobQueue, connect
-from .store import Store, input_key, job_key, manifest_key, thumb_key
+from .store import Store, input_key, job_key, manifest_key, thumb_key, view_key
 
 RETRY_AFTER_S = 30
 POLL_S = 0.5
@@ -184,6 +184,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """A page's thumbnail. It depends only on the document's bytes, so it never changes."""
         if (data := await svc().store.get(thumb_key(doc_sha, page))) is None:
             raise HTTPException(404, "no thumbnail for this page")
+        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+    @app.get("/v1/pages/{doc_sha}/{page}")
+    async def get_page_view(doc_sha: Annotated[str, PathParam(pattern=SHA)], page: Annotated[int, PathParam(ge=0)]):
+        """A page at full resolution, for people. It is rendered from the stored document the first time it is asked
+        for and kept, so routing never pays for it."""
+        store = svc().store
+        if (data := await store.get(view_key(doc_sha, page))) is None:
+            if (document := await store.get(input_key(doc_sha))) is None:
+                raise HTTPException(404, "this document's bytes are not stored")
+            try:
+                data = await asyncio.to_thread(probes.image.page_view, document, page)
+            except (IndexError, EOFError, OSError) as e:
+                raise HTTPException(404, f"no view of this page: {type(e).__name__}") from None
+            await store.put(view_key(doc_sha, page), data)
         return Response(data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
     @app.get("/v1/info")
