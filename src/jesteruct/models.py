@@ -47,9 +47,20 @@ class TextStats(BaseModel):
     cid_share: float = 0.0
     odd_char_share: float = 0.0
     short_token_share: float = 0.0
-    common_word_share: float = 0.0
     math_share: float = 0.0  # mathematical symbols and operators, as a share of the non-space characters
     script: dict[str, float] = Field(default_factory=dict)
+    language: str = ""  # ISO 639-3 code of the main language (probes.language); "" when there is none
+    readability: float | None = None  # probability that the letters are real language; None with too few to judge
+    unreadable: str = ""  # why the text does not read as language; "" when it does
+
+
+class TextReading(BaseModel):
+    """What the language probe made of a PDF text layer (probes.language), as manifests and live views show it."""
+
+    language: str = ""  # ISO 639-3 code; "" when the text holds no single main language
+    name: str = ""  # the language's English name
+    readability: float | None = None  # probability that the letters are real language; None with too few to judge
+    unreadable: str = ""  # why the text does not read as language; "" when it does
 
 
 class ImageQuality(BaseModel):
@@ -95,10 +106,9 @@ class PageEvidence(BaseModel):
     image: ImageQuality
     pdf: PdfFacts | None = None
     layout: LayoutFacts | None = None  # None when the layout model failed
-    text: str = ""  # embedded text layer (PDF) or OCR text (image), capped against hostile files
+    text: str = ""  # the PDF's embedded text layer, capped against hostile files; image files have none
     text_stats: TextStats = Field(default_factory=TextStats)
-    ocr: OcrResult | None = None  # fresh OCR, run when the text layer is missing or not trusted
-    ocr_stats: TextStats | None = None
+    ocr: OcrResult | None = None  # fresh OCR, run only to check a PDF text layer that is not trusted
     ocr_agreement: float | None = None  # word overlap of a PDF text layer with the fresh OCR text
 
 
@@ -122,6 +132,7 @@ class PageRoute(BaseModel):
     degradation: float | None = None
     continuation: float | None = None
     vision: VisionFacts | None = None
+    text: TextReading | None = None  # the PDF text layer's language and readability; None for image files
     reasons: list[str] = Field(default_factory=list)
     evidence: str | None = None  # what Jev was told about the page, in words (never the page's text)
     thumb_key: str | None = None

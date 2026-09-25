@@ -28,7 +28,7 @@ from .config import Settings
 from .events import NO_EVENTS, Events
 from .evidence import EVIDENCE_VERSION, build_state
 from .limiter import LocalLimiter, ValkeyLimiter
-from .models import Doc, Lane, Manifest, PageEvidence, PageRef, PageRoute, Versions, VisionFacts
+from .models import Doc, Lane, Manifest, PageEvidence, PageRef, PageRoute, TextReading, Versions, VisionFacts
 from .probes.ocr import resolve_backend
 from .providers import OpenRouter, ProviderRejected
 from .segment import segment
@@ -91,6 +91,7 @@ class Router:
         self._provider = provider
         self._pool = pool
         self._pages = asyncio.Semaphore(settings.page_concurrency)
+        self.lid_model = probes.language.check(settings.lid_model)
         self.ocr_backend = resolve_backend(settings.ocr_backend)
         self.calibration = load_calibration(settings)
         self.route_key = route_key(settings)
@@ -190,13 +191,15 @@ class Router:
                     await run.stage(i, "ocr", "skip")
                     await run.stage(i, "vision", "skip")
                 else:
-                    ev, vision = await self._read_and_look(run, i, ev, jpeg, timings, reasons)
+                    ev, vision = await self._read_and_look(run, i, ev, jpeg, timings, reasons, policy.needs_ocr(ev))
             finally:
                 if not run.tails[i].done():
                     run.tails[i].set_result(ev.text)
 
             thumb = thumb_key(doc.sha256, i)
             await self.store.put(thumb, probes.image.thumbnail(jpeg))
+            if not trusted and vision is None:  # the vision request was rejected: review, as for Jev (decision 9)
+                return await run.fixed(i, "LH", reasons[-1], thumb)
             previous = await run.tails[i - 1] if i > 0 else None
 
             state = build_state(ev, vision, previous)
@@ -216,18 +219,30 @@ class Router:
             route = policy.route_page(i, decision.answers, ev, vision, self.settings.review_threshold, self.calibration)
             route.reasons.extend(reasons)
             route.evidence = state["page_evidence"]
+            route.text = _reading(ev)
             route.thumb_key = thumb
             route.timings_ms = {**timings, "total": _ms(start)}  # OCR and vision overlap, so stages don't sum to total
             await run.routed(route)
             return route
 
     async def _read_and_look(
-        self, run: "_DocRun", i: int, ev: PageEvidence, jpeg: bytes, timings: dict[str, int], reasons: list[str]
+        self,
+        run: "_DocRun",
+        i: int,
+        ev: PageEvidence,
+        jpeg: bytes,
+        timings: dict[str, int],
+        reasons: list[str],
+        ocr: bool,
     ) -> tuple[PageEvidence, VisionFacts | None]:
-        """No trusted text layer: OCR the page and ask the vision model, in parallel; each reports when it is done."""
+        """No trusted text layer: ask the vision model and, when there is a layer to check, OCR the page, in parallel;
+        each reports when it is done."""
         t = time.perf_counter()
 
         async def read() -> tuple[PageEvidence, str | None]:
+            if not ocr:
+                await run.stage(i, "ocr", "skip")
+                return ev, None
             await run.stage(i, "ocr", "start")
             try:
                 read = await self._run(probes.read_text, ev, jpeg, self.ocr_backend)
@@ -257,9 +272,9 @@ class Router:
 
     async def _probe(self, ref: PageRef, override: str | None) -> tuple[PageEvidence, bytes]:
         try:
-            return await self._run(probes.probe_page, ref, override)
+            return await self._run(probes.probe_page, ref, override, self.lid_model)
         except Exception:  # one retry in a fresh process covers transient crashes
-            return await self._run(probes.probe_page, ref, override)
+            return await self._run(probes.probe_page, ref, override, self.lid_model)
 
     async def _run(self, fn, *args):
         future = self._pool.schedule(fn, args=args, timeout=self.settings.probe_timeout_s)
@@ -307,6 +322,15 @@ class _DocRun:
         )
 
 
+def _reading(ev: PageEvidence) -> TextReading | None:
+    """The text layer as the language probe read it; image files have none."""
+    if ev.pdf is None:
+        return None
+    st = ev.text_stats
+    name = probes.language.NAMES.get(st.language, "")
+    return TextReading(language=st.language, name=name, readability=st.readability, unreadable=st.unreadable)
+
+
 def _probe_facts(ev: PageEvidence, trusted: bool) -> dict:
     """What the probes measured, for live views; never the page text."""
     return {
@@ -315,6 +339,7 @@ def _probe_facts(ev: PageEvidence, trusted: bool) -> dict:
         "image": ev.image.model_dump(mode="json"),
         "layout": ev.layout.model_dump(mode="json") if ev.layout else None,
         "pdf": ev.pdf.model_dump(mode="json") if ev.pdf else None,
+        "text": reading.model_dump(mode="json") if (reading := _reading(ev)) else None,
     }
 
 
@@ -371,9 +396,9 @@ async def probe_state(path: Path, page: int, settings: Settings) -> dict:
         if doc.quarantine:
             return {"doc": doc.model_dump(), "quarantine": doc.quarantine}
         ref = PageRef(doc_path=doc.path, index=page, kind="pdf" if doc.kind == "pdf" else "image")
-        ev, jpeg = probes.probe_page(ref)
+        ev, jpeg = probes.probe_page(ref, lid_model=probes.language.check(settings.lid_model))
         trusted = policy.text_layer_trusted(ev)
-        if not trusted:
+        if not trusted and policy.needs_ocr(ev):
             ev = probes.read_text(ev, jpeg, resolve_backend(settings.ocr_backend))
         return {
             "doc": doc.model_dump(),

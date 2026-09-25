@@ -134,9 +134,9 @@ variable "worker_replicas" {
 }
 
 variable "worker_max_docs" {
-  description = "Documents one worker routes at a time."
+  description = "Documents one worker routes at a time; its pages wait on the providers, not on its CPU."
   type        = number
-  default     = 2
+  default     = 32
 }
 
 variable "worker_resources" {

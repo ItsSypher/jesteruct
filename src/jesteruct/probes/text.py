@@ -1,23 +1,16 @@
-"""Statistics that tell readable text from garbage: common-word share, encoding codes, odd symbols, script, and how
-well two readings of one page agree."""
+"""Statistics that tell readable text from garbage, in any language: the language and readability of the text
+(language.py), encoding codes, odd symbols, script, and how well two readings of one page agree."""
 
 import re
 import unicodedata
 
-from ..models import TextStats
+import regex
 
-_WORD = re.compile(r"[A-Za-z]{2,}")
-_AGREEMENT_WORD = re.compile(r"[A-Za-z]{3,}")
+from ..models import TextStats
+from .language import UNSPACED, identify
+
+_WORD = regex.compile(r"[\p{L}\p{M}]{3,}")  # a word of three or more letters, in any script
 _CID = re.compile(r"\(cid:\d+\)")
-_COMMON = set(
-    "the of and to in a is that for it as was with be by on not he this are or his from at which but have an they "
-    "you were her she there been one all we their has would when who will more if no out so said what up its about "
-    "into than them can only other new some could time these two may then do first any my now such like our over "
-    "man me even most made after also did many before must through back years where much your way well down should "
-    "because each just those people how too little state good very make world still own see men work long get here "
-    "between both life being under never day same another know while last might us great old year off come since "
-    "against go came right used take three".split()
-)
 
 
 def _script(ch: str) -> str:
@@ -38,9 +31,9 @@ def _mathy(ch: str) -> bool:
     return unicodedata.category(ch) == "Sm" or "Ͱ" <= ch <= "Ͽ" or "\U0001d400" <= ch <= "\U0001d7ff"
 
 
-def text_stats(text: str) -> TextStats:
+def text_stats(text: str, lid_model: str | None = None) -> TextStats:
+    """The statistics of a text; with `lid_model`, also its language and readability."""
     tokens = text.split()
-    words = _WORD.findall(text)
     n = max(1, len(text))
     visible = [ch for ch in text if not ch.isspace()]
     scripts: dict[str, int] = {}
@@ -49,21 +42,31 @@ def text_stats(text: str) -> TextStats:
             key = _script(ch)
             scripts[key] = scripts.get(key, 0) + 1
     letters = sum(scripts.values()) or 1
+    language, readability, unreadable = identify(text, lid_model) if lid_model and text.strip() else ("", None, "")
     return TextStats(
         chars=len(text.strip()),
         cid_share=len(_CID.findall(text)) * 7 / n,
         odd_char_share=sum(unicodedata.category(ch) in ("Co", "Cn", "So") or ch == "�" for ch in text) / n,
         short_token_share=sum(len(t) < 2 for t in tokens) / max(1, len(tokens)),
-        common_word_share=sum(w.lower() in _COMMON for w in words) / max(1, len(words)),
         math_share=sum(map(_mathy, visible)) / max(1, len(visible)),
         script={k: round(v / letters, 2) for k, v in scripts.items()},
+        language=language,
+        readability=readability,
+        unreadable=unreadable,
     )
 
 
+def _units(text: str) -> set[str]:
+    """Words of three or more letters in any script, and character pairs in scripts written without spaces."""
+    text = text.lower()
+    pairs = {run[i : i + 2] for run in UNSPACED.findall(text) for i in range(len(run) - 1)}
+    return set(_WORD.findall(UNSPACED.sub(" ", text))) | pairs
+
+
 def agreement(layer: str, ocr: str) -> float | None:
-    """Jaccard similarity of the lower-cased words of three or more letters; None when the layer has no such words."""
-    a = {w.lower() for w in _AGREEMENT_WORD.findall(layer)}
+    """Jaccard similarity of the two readings' units; None when the layer has none."""
+    a = _units(layer)
     if not a:
         return None
-    b = {w.lower() for w in _AGREEMENT_WORD.findall(ocr)}
+    b = _units(ocr)
     return round(len(a & b) / len(a | b), 3)

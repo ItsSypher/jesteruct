@@ -252,7 +252,8 @@ def run(model: str, packets: Path, effort: str) -> None:
 
     def one(path: Path) -> dict:
         page = ids[path.stem]
-        return {"key": page["key"], **labeller.label(model, page["rubric"], path.read_bytes())}
+        answer = labeller.label(model, page["rubric"], path.read_bytes())
+        return {"key": page["key"], "rubric": page["rubric"], **answer}
 
     try:
         answers = _map(one, images)
@@ -261,9 +262,7 @@ def run(model: str, packets: Path, effort: str) -> None:
     missing = [a["key"] for a in answers if a["code"] is None]
     if missing:
         raise SystemExit(f"{len(missing)} pages without a valid answer, for example {missing[:3]}; nothing recorded")
-    added = labels.append(
-        HERE / "labels.jsonl", ({"key": a["key"], "labeller": "b", "code": a["code"], "why": a["why"]} for a in answers)
-    )
+    added = labels.append(HERE / "labels.jsonl", ({**a, "labeller": "b"} for a in answers))
     print(f"{added} opinions added as labeller b; ${labeller.spent:.4f} spent in all")
 
 

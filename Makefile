@@ -1,10 +1,17 @@
 SHA := $(shell git rev-parse --short HEAD)
 TF_LOCAL := terraform -chdir=infra/terraform/envs/local
+MODELS ?= $(HOME)/.cache/jesteruct
 
-.PHONY: sync lint test web studio studio-cluster image deploy-local smoke destroy-local
+.PHONY: sync models lint test web studio studio-cluster image deploy-local smoke destroy-local
 
 sync:
 	uv sync
+
+# The text-layer language model (scripts/openlid.py built it; the router's default JST_LID_MODEL), checked by sha256.
+models:
+	mkdir -p $(MODELS)
+	gh release download openlid-v3-pq1 --pattern 'openlid-v3.ftz*' --dir $(MODELS) --clobber
+	cd $(MODELS) && shasum -a 256 -c openlid-v3.ftz.sha256
 
 lint:
 	uv run ruff check
@@ -25,8 +32,8 @@ studio: web
 studio-cluster:
 	kubectl --context orbstack -n jesteruct port-forward svc/jesteruct-api 8000:8000
 
-image:
-	docker build -f deploy/Dockerfile -t jesteruct:$(SHA) .
+image: models
+	docker build --build-context models=$(MODELS) -f deploy/Dockerfile -t jesteruct:$(SHA) .
 
 # The OpenRouter key comes from .env only (the shell may export a stale one) and reaches Terraform through the
 # environment, so it is never echoed.

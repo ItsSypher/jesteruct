@@ -100,6 +100,18 @@
     </section>
   {/if}
 
+  {#if page.text}
+    {@const t = page.text}
+    <section>
+      <p class="label muted">Text layer</p>
+      <dl class="vision">
+        <dt>language</dt><dd>{t.name || (t.readability == null ? 'too little text to tell' : 'several')}</dd>
+        <dt>reads as language</dt><dd>{t.readability == null ? '-' : fixed(t.readability)}</dd>
+        {#if t.unreadable}<dt>why not</dt><dd>{t.unreadable}</dd>{/if}
+      </dl>
+    </section>
+  {/if}
+
   {#if page.vision}
     {@const v = page.vision}
     <section>
@@ -148,7 +160,7 @@
 
   {#if page.ocr}
     <section>
-      <p class="label muted">Quick OCR</p>
+      <p class="label muted">OCR check of the text layer</p>
       <p class="mono small">{page.ocr.lines} lines, confidence {fixed(page.ocr.confidence)}, {page.ocr.backend}</p>
     </section>
   {/if}
