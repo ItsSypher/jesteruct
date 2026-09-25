@@ -62,8 +62,9 @@ def test_agreement_compares_words_of_three_or_more_letters():
 @pytest.mark.skipif(not FILES.exists(), reason="evalset files not present")
 def test_layout_columns_on_the_issue_pages():
     """Slide bullets do not read as two columns; a paper does, and so does a newsletter whose columns are short."""
-    newsletter = FILES.parent / "fresh/files/pdf_olm_cols_08c9eac4_page_1_pg1.pdf"
-    for path, columns in ((FILES / "pdf_olmx_02.pdf", 1), (FILES / "pdf_olmocr_multicol_01.pdf", 2), (newsletter, 2)):
+    newsletter = FILES.parent / "fresh/files/pdf_olm_cols_08c9eac4_page_1_pg1.pdf"  # present after build.py fetch
+    pages = [(FILES / "pdf_olmx_02.pdf", 1), (FILES / "pdf_olmocr_multicol_01.pdf", 2)]
+    for path, columns in pages + ([(newsletter, 2)] if newsletter.exists() else []):
         ev, jpeg = probe_page(PageRef(doc_path=str(path), index=0, kind="pdf"))
         assert ev.layout == layout.detect(jpeg)
         assert (ev.layout.columns, ev.pdf.columns) == (columns, columns), path.name
