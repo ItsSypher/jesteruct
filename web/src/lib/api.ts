@@ -60,3 +60,5 @@ export function submit(file: Blob, name: string, onProgress: (f: number) => void
 export const job = (id: string) => json<JobIndex>(`/v1/jobs/${encodeURIComponent(id)}`);
 export const manifest = (sha: string) => json<Manifest>(`/v1/manifests/${sha}`);
 export const thumb = (sha: string, page: number) => `/v1/thumbs/${sha}/${page}`;
+/** A page at full resolution: rendered by the API from the stored document the first time it is asked for. */
+export const pageView = (sha: string, page: number) => `/v1/pages/${sha}/${page}`;

@@ -30,6 +30,10 @@ def thumb_key(doc_sha: str, index: int) -> str:
     return f"thumbs/{doc_sha}/{index}.jpg"
 
 
+def view_key(doc_sha: str, index: int) -> str:
+    return f"views/{doc_sha}/{index}.jpg"
+
+
 def cache_key(provider: str, digest: str) -> str:
     return f"cache/{provider}/{digest[:2]}/{digest}.json"
 

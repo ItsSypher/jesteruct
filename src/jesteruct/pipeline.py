@@ -32,7 +32,7 @@ from .models import Doc, Lane, Manifest, PageEvidence, PageRef, PageRoute, TextR
 from .probes.ocr import resolve_backend
 from .providers import OpenRouter, ProviderRejected
 from .segment import segment
-from .store import Store, manifest_key, thumb_key
+from .store import Store, input_key, manifest_key, thumb_key
 
 log = logging.getLogger(__name__)
 
@@ -124,12 +124,21 @@ class Router:
             docs = await self._run(intake.expand, path, self.settings, Path(work), name)
             manifests = []
             for doc in docs:
+                if persist and doc.parent_sha is not None and doc.kind in ("pdf", "image"):
+                    await self._keep(doc)
                 # the manifest records where the document came from, not the temp copy it was routed from
                 label = (name or str(path)) if doc.parent_sha is None else doc.name
                 run = _DocRun(doc.model_copy(update={"path": label}), doc.path, text_overrides or {}, events)
                 await events("doc", **doc.model_dump(include=_DOC_EVENT, mode="json"), doc_sha=doc.sha256)
                 manifests.append(await self._route_doc(run, reuse and persist, persist))
             return manifests
+
+    async def _keep(self, doc: Doc) -> None:
+        """Store a document found inside a container, as the API stores what it is given, so every page has a
+        full-resolution view (api.get_page_view)."""
+        key = input_key(doc.sha256)
+        if not await self.store.exists(key):
+            await self.store.put(key, await asyncio.to_thread(Path(doc.path).read_bytes))
 
     async def _route_doc(self, run: "_DocRun", reuse: bool, persist: bool) -> Manifest:
         doc = run.doc

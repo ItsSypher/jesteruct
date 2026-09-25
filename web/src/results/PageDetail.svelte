@@ -1,10 +1,12 @@
 <script lang="ts">
+  import * as api from '../lib/api';
   import { LANE_NAMES } from '../lib/copy';
   import { fixed, ms, sentences, words } from '../lib/format';
   import type { DocView, PageView } from '../lib/reducer';
   import type { Info } from '../lib/types';
   import LaneChip from '../ui/LaneChip.svelte';
   import Answers from './Answers.svelte';
+  import Lightbox from './Lightbox.svelte';
   import { thumbFor } from './thumbs';
   import Timeline from './Timeline.svelte';
 
@@ -28,6 +30,18 @@
   const evidence = $derived(page.evidence ? sentences(page.evidence) : []);
   const flags = (m: Record<string, boolean>) =>
     Object.entries(m).map(([k, v]) => ({ name: words(k), on: v }));
+
+  // the page, large: it grows out of the thumbnail, and focus returns to the thumbnail when it closes
+  let expanded = $state<{ from: DOMRect | null; opener: HTMLElement } | null>(null);
+  function open(e: MouseEvent) {
+    const opener = e.currentTarget as HTMLElement;
+    expanded = { from: opener.querySelector('img')?.getBoundingClientRect() ?? null, opener };
+  }
+  function close() {
+    const opener = expanded?.opener;
+    expanded = null;
+    opener?.focus();
+  }
 </script>
 
 <article class="detail" aria-label="Page {page.index + 1} of {doc.name}">
@@ -39,8 +53,21 @@
 
   <div class="top">
     <div class="thumb">
-      {#if src}<img {src} alt="Page {page.index + 1} of {doc.name}" />{:else}<span class="mono muted">no image</span>{/if}
+      {#if src}
+        <button class="expand" onclick={open} aria-label="View page {page.index + 1} large">
+          <img {src} alt="Page {page.index + 1} of {doc.name}" />
+        </button>
+      {:else}<span class="mono muted">no image</span>{/if}
     </div>
+    {#if expanded && src}
+      <Lightbox
+        thumb={src}
+        full={live ? api.pageView(doc.sha, page.index) : null}
+        alt="Page {page.index + 1} of {doc.name}"
+        from={expanded.from}
+        onclose={close}
+      />
+    {/if}
     <div class="verdict">
       {#if route}
         <LaneChip lane={route.lane} named large />
@@ -233,6 +260,21 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+  }
+
+  .expand {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+  }
+
+  .expand:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 
   .verdict {
