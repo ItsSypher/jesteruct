@@ -35,7 +35,7 @@ Read `docs/ARCHITECTURE.md` before changing anything; it holds the design and th
 - On any Kubernetes cluster, cloud-agnostic:
   - Helm charts in `deploy/helm/`;
   - Terraform in `infra/terraform/`, kept OpenTofu-compatible;
-  - KEDA scaling workers on Valkey stream lag.
+  - KEDA scaling workers on the Valkey stream's length (unfinished jobs).
 - Test the cluster locally on OrbStack Kubernetes: `make deploy-local`, then `make smoke`.
 - CI publishes multi-arch images to GHCR from `main`.
 

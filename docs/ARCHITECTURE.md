@@ -46,25 +46,29 @@ file ──► intake ──► per page: probes ──► [OCR + vision] ──
 
 ## Measured
 
-`jst evaluate` on both labelled sets with the shipped settings: evidence e3, policy p3, one page per Jev request and calibration `c2-b7e43e4002` (M4 laptop, Apple Vision OCR, Gemini 3.8 Flash, 2026-09-24).
-`evalset/` holds the 98 cases the evidence was first tuned on; `evalset/fresh/` holds 396 cases labelled later from nine public benchmarks, disjoint from the first.
+`jst evaluate` with the shipped settings: evidence e3, policy p3, one page per Jev request and calibration `c2-2ecc2176bc` (M4 laptop, Apple Vision OCR, Gemini 3.8 Flash, 2026-09-25).
+`evalset/` holds the 98 cases the evidence was first tuned on; `evalset/fresh/` holds 1,722 cases labelled later, and its holdout split was never fitted on (decision 8).
 
-| Metric | `evalset/` | `evalset/fresh/` |
+| Metric | `evalset/` | `evalset/fresh/` holdout |
 |---|---|---|
-| Candidate lane right | 0.959 | 0.939 |
-| Sent to review (LH) | 10.2% | 15.9% |
-| Silent wrong lane (kept, and wrong) | 0.0% | 1.0% |
-| Silent under-routing (kept, and too weak) | 0.0% | 0.3% |
-| Page latency, born-digital PDF | p50 0.4 s | p50 0.4 s |
-| Page latency, all pages | p50 5.4 s, p95 14 s | p50 5.1 s, p95 14 s |
-| Cost per 1,000 pages | about $2.80 | about $2.70 |
+| Candidate lane right | 0.959 | 0.891 |
+| Sent to review (LH) | 17.3% | 24.0% |
+| Silent wrong lane (kept, and wrong) | 0.0% | 6.2% |
+| Silent under-routing (kept, and too weak) | 0.0% | 3.5% |
 
-The vision call dominates both latency and cost.
-The calibration was fitted on both sets, so its review numbers are in-sample; fitted on the fresh set alone it sent 10.2% of `evalset/` to review and left 1.0% silently wrong (decision 7).
-The fresh set also showed where the evidence was weak, so its lane accuracy is optimistic for unseen documents.
+The grown set is harder than the first 396 fresh pages suggested.
+Those reach 0.929, while the pages added for issue #6, drawn towards the lane boundaries, reach 0.880 in tune and 0.891 in holdout.
+Born-digital PDFs are the weakest group, at 0.849 against 0.918 for image pages: 21 L2 pages go to L1, 17 L1 pages go to L2, and Jev trusts the text layer of 33 scanned pages.
+Most of the remaining mistakes are confident ones, which review cannot catch (decision 7); issue #9 collects them for the next evidence version.
 
-Measured on evidence e1, the Linux container with RapidOCR in place of Apple Vision routed as well as the Mac (0.939 against 0.929 candidate accuracy), so the OCR backend does not change routing quality.
-CPU OCR is slower: about 5 s per page at p50 on image pages.
+Latency and cost were measured on a cold cache on 2026-09-24, on the 98 cases and the first 396 fresh ones.
+Born-digital pages take 0.4 s at p50, and all pages 5.1-5.4 s at p50 and 14 s at p95, for about $2.70-2.80 per 1,000 pages; the vision call dominates both.
+
+The same 1,722 pages sent through the OrbStack deployment with `jst evaluate --api`, where Linux workers use RapidOCR, routed as well as the Mac: 0.895 candidate accuracy on both, and 6.1% silently wrong on holdout against 6.2%.
+Their candidate lanes differed on 43 pages, 19 of which Apple Vision had right and 18 RapidOCR, so the OCR backend still does not change routing quality.
+Which pages differ is telling.
+RapidOCR reads handwritten Chinese notes fluently, and Jev then takes them for clean print (L3 rather than L5); Apple Vision's English-only pass fails on them, and that failure is what sends them to L5.
+KEDA took the workers from 0 to 8 on OrbStack's 10-CPU VM, where each used about one core and together they routed about two pages a second: on image pages the bound was CPU OCR, not Jev's request limit (decision 6).
 
 `make smoke` on OrbStack Kubernetes (router v1 with evidence e1):
 - 43 real documents went through the API.
@@ -81,7 +85,7 @@ One library, two ways to run it.
 
 ```
 client ─► API ─► object store (inputs/)            workers ─► object store (manifests/, thumbs/, cache/)
-            └──► Valkey stream jst:jobs ──────────► ▲  scaled by KEDA on stream lag
+            └──► Valkey stream jst:jobs ──────────► ▲  scaled by KEDA on stream length
 Studio ◄── API ◄── Valkey stream jst:events ◄──────── workers report each page's progress
 ```
 
@@ -103,7 +107,7 @@ The phrases in `evidence.py` are versioned (`EVIDENCE_VERSION`), and each versio
 Version e1 reproduced the benchmark's evidence exactly; a test still holds the e1 part of every born-digital page to it.
 Version e2 closed two gaps the benchmark left (issue #4).
 It adds the layout model's regions, and on PDF pages it says whether the text layer agrees with a fresh OCR pass, because a layer that disagrees is usually OCR run over handwriting.
-Version e3 closes the gaps the fresh set exposed:
+Version e3 closes the gaps the fresh set's first 396 pages exposed:
 - Inline mathematics.
   The layout model finds only displayed formulas, so e2's "no formulas" talked Jev out of L2 on pages full of inline notation.
   e3 says "formula blocks", and adds a clause when mathematical symbols pass 8 in every 1,000 characters; born-digital L1 pages stay below 5.2.
@@ -112,8 +116,8 @@ Version e3 closes the gaps the fresh set exposed:
   Photocopies, bleed-through and book spreads were called flatbed scans with mild issues, and went to L3.
   The vision check now names the defects that make characters harder to read, and Jev answers a matching `capture_defects` question (policy p2).
 
-Born-digital pages improved on both sets: 15 to 16 of 17 right on `evalset/`, and 76 to 82 of 88 on the fresh set.
-On vision-checked pages the fresh set's too-weak candidates fell from 17 to 8 of 308, while `evalset/` lost 3 of 81; e2 was perfect there, having been tuned on it.
+Born-digital pages improved on both sets: 15 to 16 of 17 right on `evalset/`, and 76 to 82 of 88 on those 396.
+On vision-checked pages their too-weak candidates fell from 17 to 8 of 308, while `evalset/` lost 3 of 81; e2 was perfect there, having been tuned on it.
 Across all 494 labelled pages, 466 candidate lanes are right against 458, and too-weak candidates fall from 28 to 12.
 
 **3. A small layout model, not a large one.**
@@ -151,33 +155,40 @@ One page per request is the only setting where a route depends on nothing but it
 Past 16 pages a second, the clean lever is a higher Jev limit; batching is there for bulk backfills that can give up about two points of accuracy (0.959 on average at 2 or 4 pages, against 0.980).
 
 **7. Review comes from calibrated probabilities.**
-Jev never abstains, and the product of its answers along the rule path is not a probability: at a raw threshold of 0.5, review caught only 5 of the 24 wrong candidate lanes on the fresh set.
+Jev never abstains, and the product of its answers along the rule path is not a probability.
 `calibrate.py` fits an isotonic curve per candidate lane on `jst evaluate` results, mapping that product to the probability that the lane is right.
 Review is the cheaper choice when the probability is below 1 - 1/r, where r is what one silent wrong lane costs in reviews.
 The shipped calibration uses r = 10, so pages below 0.9 go to LH (issue #3).
-Fitted on the fresh set and checked on `evalset/`:
+It is fitted on the fresh set's tune split alone, and on its holdout split:
 
 | Review rule | Sent to review | Silent wrong lane | Silent under-routing |
 |---|---|---|---|
-| Raw product below 0.5 | 2.0% | 4.1% | 1.0% |
-| Calibrated, r = 5 | 7.1% | 2.0% | 0.0% |
-| Calibrated, r = 10 (shipped) | 10.2% | 1.0% | 0.0% |
-| Calibrated, r = 20 | 17.3% | 0.0% | 0.0% |
+| Raw product below 0.5 | 3.3% | 9.4% | 5.0% |
+| Calibrated, r = 5 | 8.7% | 8.1% | 4.6% |
+| Calibrated, r = 10 (shipped) | 24.0% | 6.2% | 3.5% |
+| Calibrated, r = 20 | 54.7% | 1.4% | 0.8% |
 
-Per-lane curves sent fewer pages to review than one curve for all lanes, for the same or fewer errors, at every r (10.2% against 16.3% at r = 10).
+The previous calibration, fitted on the first 494 labelled pages, reviewed 13.4% of holdout and left 7.3% silently wrong: the same cost at r = 10, with more of it silent.
+Five-fold cross-validation on tune found no curve shape that generalises better; per lane or pooled, isotonic or logistic, all cost 0.62-0.70 per page at r = 10, counting a review as 1 and a silent wrong lane as 10.
+Calibration cannot catch a confident mistake, and most of the remaining ones are confident.
+For L2 candidates the raw product hardly separates right from wrong (AUC 0.56, against 0.74-0.89 for the other lanes), so the next gain has to come from the evidence (issue #9).
 `jst calibrate --cost-ratio` refits for a different trade-off.
 A calibration records the answer basis it was fitted on: evidence and policy versions, question set, models and batch size.
 The router applies it only on the same basis and otherwise falls back to `review_threshold` with a warning, so an evidence change never runs under a stale curve.
 The OCR backend is left out of the basis because it does not change routing, so the curve fitted on the Mac also serves the Linux containers.
 
-**8. Two labelled sets, and labels that can be sets.**
+**8. Two labelled sets, labels that can be sets, and a holdout.**
 `evalset/` (98 cases) tuned evidence e1 and e2.
-`evalset/fresh/` (396 cases from nine public benchmarks, rebuilt byte for byte by `evalset/fresh/build.py`) was labelled afterwards, disjoint from it, to calibrate review and to check the evidence (issue #3).
-Where a lane is genuinely arguable, the label is a set such as L3/L4, and either lane counts as right.
-A page gets a set label when two labellers disagree.
-The L4 pages the router sent to L3 had a blind second look, mixed with as many pages it routed to L4, and the 17 that the second labeller saw as clean or borderline now accept either lane; every control page kept its label.
-An evidence or policy change is judged on both sets together, because the first is the set the old bins were tuned on.
-Issue #3 asked for 1,500 pages; at about 140 KB a page that is 200 MB in git, so the set stops at 396 until its files move out of the repository.
+`evalset/fresh/` (1,722 cases from public benchmarks and web documents, rebuilt byte for byte by `evalset/fresh/build.py`) was labelled afterwards, disjoint from it, to calibrate review and to check evidence changes (issues #3 and #6).
+Every page is labelled blind, from the image the router sees and with nothing that names its source.
+Labeller A is Claude and labeller B a model of another family (`openai/gpt-6-luna-pro`); where they disagree, adjudicator C, also blind, decides.
+Where a lane is genuinely arguable, the label is a set such as L3/L4, and either lane counts as right: opinions that differ across only one boundary give the set.
+A and B agreed on 74.5% of the capture pages and 93.4% of the layout pages (`evalset/fresh/LICENSES.md` has the rest).
+The set is split once, by source document, and `split.json` never changes.
+`tune` (1,064 cases) holds all of the first build's 396, which shaped e3, and half of the new pages; the calibration is fitted on it and evidence is developed against it.
+`holdout` (658 new cases, drawn towards the L3/L4 and L1/L2 boundaries) is never fitted on, so its numbers are the ones that count.
+An evidence or policy change is judged on `evalset/` and both splits.
+The page files (281 MB) are the release asset `evalset-fresh-v2`, which `build.py fetch` downloads and checks against every case's sha256.
 
 **9. Failures degrade; they never crash a job or flood review.**
 
@@ -195,7 +206,7 @@ Job ids combine the input hash with the route key, so duplicate submissions coll
 Manifests live at `manifests/{doc_sha}/{route_key}.json`, and existing ones are reused.
 
 **11. Valkey Streams with a small consumer, not a task framework.**
-KEDA can scale on stream lag; arq's sorted set cannot be scaled on.
+KEDA scales workers on the stream's length: acked messages are deleted, so it is exactly the unfinished work, whereas Valkey stops reporting the group's lag once entries are deleted. arq's sorted set cannot be scaled on.
 Celery fights asyncio, and NATS would add a second stateful service.
 The consumer is about 150 lines: heartbeats, reclaiming stalled messages, dead-lettering.
 
@@ -211,6 +222,9 @@ The pool size comes from the container's CPU limit.
 **14. OCR differs by platform, behind one function.**
 Apple Vision runs natively on macOS, and RapidOCR (ONNX) runs in Linux containers.
 The backend is part of the route key.
+`auto` first checks, once and in a child process, that Apple Vision answers, and falls back to RapidOCR when it does not.
+The check allows 180 s because after a macOS update Vision recompiles its Neural Engine models (26-59 s on an M4), and it keeps them only for a caller that outlives the compile.
+A shorter deadline, like the probe pool's 60 s task timeout on ten cold workers at once, kills every caller first: the cache never fills, and the compiler keeps a core busy for callers that are already dead.
 
 **15. Cloud-agnostic deployment.**
 Storage is addressed by URL (`s3://`, `gs://`, `az://`, `file://`), and Valkey is any Redis-protocol service.

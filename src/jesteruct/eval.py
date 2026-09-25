@@ -1,16 +1,24 @@
 """`jst evaluate`: route the labelled set through the real pipeline and report lane accuracy, review rate, latency
-and cost, overall and per group (img/pdf/ocr/garb). Never calls a provider itself; it drives the Router.
+and cost, overall, per group (img/pdf/ocr/garb) and per split. Never calls a provider itself: it drives the Router
+in-process, or a running service through its API.
 """
 
 import asyncio
 import json
+import time
+from collections.abc import Callable
 from pathlib import Path
 
+import httpx
 from pydantic import BaseModel
 
 from .config import Settings
-from .models import LANE_RANK, Lane
+from .models import LANE_RANK, Lane, Manifest, PageRoute
 from .store import Store
+
+IN_FLIGHT = 64  # documents at the service at once with --api
+POLL_S = 2.0
+JOB_DEADLINE_S = 1800
 
 _METRIC_COLUMNS = (
     "n",
@@ -35,6 +43,7 @@ class EvalCase(BaseModel):
     group: str
     source: str = ""
     text_override: str | None = None
+    split: str | None = None  # evalset/fresh: "tune" or "holdout" (the held-out part is never fitted on)
 
 
 def _load_cases(path: Path, limit: int | None) -> list[EvalCase]:
@@ -94,11 +103,11 @@ def _report_md(summary: dict, rows: list[dict], errors: list[dict]) -> str:
     header = ["group", *_METRIC_COLUMNS]
     lines.append("| " + " | ".join(header) + " |")
     lines.append("|" + "---|" * len(header))
-    for name in ("overall", "img", "pdf", "ocr", "garb"):
-        m = summary["groups"].get(name) if name != "overall" else summary["overall"]
-        if m is None or m["n"] == 0:
-            continue
-        lines.append("| " + name + " | " + " | ".join(str(m[c]) for c in _METRIC_COLUMNS) + " |")
+    parts = [("overall", summary["overall"]), *summary["groups"].items()]
+    parts += [(f"split {s}", m) for s, m in summary["splits"].items()]
+    for name, m in parts:
+        if m["n"]:
+            lines.append("| " + name + " | " + " | ".join(str(m[c]) for c in _METRIC_COLUMNS) + " |")
     lines.append("")
 
     lines.append("## Confusion (gt -> candidate lane)")
@@ -129,54 +138,54 @@ def _report_md(summary: dict, rows: list[dict], errors: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-async def run_eval(cases: Path, settings: Settings, out: Path, limit: int | None = None) -> dict:
-    from .pipeline import answer_basis, open_router
+async def run_eval(
+    cases: Path, settings: Settings, out: Path, limit: int | None = None, api: str | None = None
+) -> dict:
+    """Route every case in-process, or with `api` through a running service as a user would.
 
+    A case with a text override (a garbled layer the eval substitutes) cannot be sent to a service, so it is always
+    routed in-process; each row records the answer basis it came from, and `jst calibrate` refuses to mix bases.
+    """
     out.mkdir(parents=True, exist_ok=True)
-    basis = answer_basis(settings)  # recorded on every row, so `jst calibrate` knows what the answers came from
     root = cases.parent
     eval_cases = _load_cases(cases, limit)
-    sem = asyncio.Semaphore(settings.page_concurrency)
     rows: list[dict] = []
     errors: list[dict] = []
 
-    async with open_router(settings, Store.from_settings(settings)) as router:
+    def record(case: EvalCase, route: PageRoute, cost: float, basis: str) -> None:
+        rows.append(
+            {
+                "id": case.id,
+                "group": case.group,
+                "split": case.split,
+                "gt": case.gt,
+                "lane": route.lane,
+                "candidate": route.candidate_lane,
+                "path_p": route.path_p,
+                "basis": basis,  # so `jst calibrate` knows what the answers came from
+                "answers": route.answers,
+                "vision_used": route.vision is not None,
+                "reasons": route.reasons,
+                "latency_ms": route.timings_ms.get("total", sum(route.timings_ms.values())),
+                "cost_usd": cost,
+            }
+        )
 
-        async def run_one(case: EvalCase) -> None:
-            overrides = {case.page: case.text_override} if case.text_override is not None else None
-            async with sem:
-                try:
-                    # always route afresh; provider responses still come from the cache, so re-runs are cheap
-                    manifests = await router.route_file(root / case.file, text_overrides=overrides, reuse=False)
-                    route = manifests[0].pages[case.page]
-                except Exception as e:  # a case that can't be routed is an error, not a crash
-                    errors.append({"id": case.id, "error": f"{type(e).__name__}: {e}"})
-                    return
-            rows.append(
-                {
-                    "id": case.id,
-                    "group": case.group,
-                    "gt": case.gt,
-                    "lane": route.lane,
-                    "candidate": route.candidate_lane,
-                    "path_p": route.path_p,
-                    "basis": basis,
-                    "answers": route.answers,
-                    "vision_used": route.vision is not None,
-                    "reasons": route.reasons,
-                    "latency_ms": route.timings_ms.get("total", sum(route.timings_ms.values())),
-                    "cost_usd": manifests[0].cost_usd,
-                }
-            )
+    local = [c for c in eval_cases if api is None or c.text_override is not None]
+    if local:
+        await _route_in_process(local, root, settings, record, errors)
+    if api and (remote := [c for c in eval_cases if c.text_override is None]):
+        await _route_through(api, remote, root, record, errors)
 
-        await asyncio.gather(*(run_one(c) for c in eval_cases))
-
-    rows.sort(key=lambda r: next(i for i, c in enumerate(eval_cases) if c.id == r["id"]))
+    order = {c.id: i for i, c in enumerate(eval_cases)}
+    rows.sort(key=lambda r: order[r["id"]])
+    splits = sorted({r["split"] for r in rows} - {None})
     summary = {
         "n_cases": len(eval_cases),
         "n_errors": len(errors),
         "overall": _metrics(rows),
         "groups": {g: _metrics([r for r in rows if r["group"] == g]) for g in ("img", "pdf", "ocr", "garb")},
+        "splits": {s: _metrics([r for r in rows if r["split"] == s]) for s in splits},
         "errors": errors,
     }
 
@@ -188,3 +197,73 @@ async def run_eval(cases: Path, settings: Settings, out: Path, limit: int | None
     (out / "report.md").write_text(_report_md(summary, rows, errors), encoding="utf-8")
 
     return summary
+
+
+Record = Callable[[EvalCase, PageRoute, float, str], None]
+
+
+async def _route_in_process(
+    cases: list[EvalCase], root: Path, settings: Settings, record: Record, errors: list[dict]
+) -> None:
+    from .pipeline import answer_basis, open_router
+
+    basis = answer_basis(settings)
+    sem = asyncio.Semaphore(settings.page_concurrency)
+    async with open_router(settings, Store.from_settings(settings)) as router:
+
+        async def one(case: EvalCase) -> None:
+            overrides = {case.page: case.text_override} if case.text_override is not None else None
+            async with sem:
+                try:
+                    # always route afresh; provider responses still come from the cache, so re-runs are cheap
+                    (manifest, *_) = await router.route_file(root / case.file, text_overrides=overrides, reuse=False)
+                    route = manifest.pages[case.page]
+                except Exception as e:  # a case that can't be routed is an error, not a crash
+                    errors.append({"id": case.id, "error": f"{type(e).__name__}: {e}"})
+                    return
+            record(case, route, manifest.cost_usd, basis)
+
+        await asyncio.gather(*(one(c) for c in cases))
+
+
+async def _route_through(api: str, cases: list[EvalCase], root: Path, record: Record, errors: list[dict]) -> None:
+    """Each distinct file goes to the service once; at most IN_FLIGHT at a time, so the queue backlog, which is what
+    KEDA scales workers on, stays deep without flooding the API."""
+    by_file: dict[str, list[EvalCase]] = {}
+    for case in cases:
+        by_file.setdefault(case.file, []).append(case)
+    in_flight = asyncio.Semaphore(IN_FLIGHT)
+    async with httpx.AsyncClient(base_url=api, timeout=120) as client:
+        basis = (await client.get("/v1/info")).raise_for_status().json()["basis"]
+
+        async def one(file: str, file_cases: list[EvalCase]) -> None:
+            async with in_flight:
+                try:
+                    manifest = await _route_remotely(client, root / file)
+                except Exception as e:
+                    errors.extend({"id": c.id, "error": f"{type(e).__name__}: {e}"} for c in file_cases)
+                    return
+            for case in file_cases:
+                if case.page < len(manifest.pages):
+                    record(case, manifest.pages[case.page], manifest.cost_usd, basis)
+                else:
+                    errors.append({"id": case.id, "error": f"the manifest has no page {case.page}"})
+
+        await asyncio.gather(*(one(f, cs) for f, cs in by_file.items()))
+
+
+async def _route_remotely(client: httpx.AsyncClient, path: Path) -> Manifest:
+    """Submit a file as a user would, wait for its job, and read the file's own manifest."""
+    r = await client.post("/v1/jobs", params={"wait": 30}, files={"file": (path.name, path.read_bytes())})
+    job = r.raise_for_status().json()
+    deadline = time.monotonic() + JOB_DEADLINE_S
+    while job["status"] not in ("done", "failed"):
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"job {job['job_id']} still {job['status']} after {JOB_DEADLINE_S} s")
+        await asyncio.sleep(POLL_S)
+        job = (await client.get(f"/v1/jobs/{job['job_id']}")).raise_for_status().json()
+    if job["status"] == "failed":
+        raise RuntimeError(job.get("error") or "job failed")
+    doc = next(d for d in job["documents"] if d["parent_sha"] is None)
+    manifest = (await client.get(f"/v1/manifests/{doc['doc_sha']}")).raise_for_status()
+    return Manifest.model_validate_json(manifest.content)

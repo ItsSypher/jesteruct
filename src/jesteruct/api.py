@@ -84,7 +84,7 @@ async def _read_capped(file: UploadFile, limit: int) -> tuple[bytes, str]:
 
 def _info(settings: Settings, route_key: str) -> dict:
     """What the router is running: versions, the calibration, the questions Jev answers and the lanes."""
-    from .pipeline import load_calibration
+    from .pipeline import answer_basis, load_calibration
 
     calibration = load_calibration(settings)
     groups = {
@@ -95,6 +95,7 @@ def _info(settings: Settings, route_key: str) -> dict:
     return {
         "version": __version__,
         "route_key": route_key,
+        "basis": answer_basis(settings),
         "evidence": EVIDENCE_VERSION,
         "policy": policy.POLICY_VERSION,
         "jev_model": settings.jev_model,
