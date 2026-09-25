@@ -19,6 +19,14 @@ export interface VisionFacts {
   defects: Record<string, boolean>;
 }
 
+/** What the language probe made of a PDF text layer, in any language. */
+export interface TextReading {
+  language: string; // ISO 639-3; "" when no single language holds most of the text
+  name: string;
+  readability: number | null; // probability that the letters are real language; null with too few to judge
+  unreadable: string; // why it does not read as language; "" when it does
+}
+
 export interface PageRoute {
   index: number;
   lane: Lane;
@@ -30,6 +38,7 @@ export interface PageRoute {
   degradation: number | null;
   continuation: number | null;
   vision: VisionFacts | null;
+  text?: TextReading | null; // absent from manifests stored before e4, and null for image files
   reasons: string[];
   evidence?: string | null; // what Jev was told; absent from manifests stored before it was recorded
   thumb_key: string | null;
@@ -99,6 +108,7 @@ export interface ProbeFacts {
   image: Record<string, number>;
   layout: Layout | null;
   pdf: Record<string, unknown> | null;
+  text?: TextReading | null;
 }
 
 export interface OcrFacts {
