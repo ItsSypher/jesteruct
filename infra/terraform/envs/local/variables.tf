@@ -18,3 +18,9 @@ variable "wait" {
   type        = bool
   default     = true
 }
+
+variable "keda_max_replicas" {
+  description = "Workers KEDA may run; raise it with OrbStack's memory (orb config set memory_mib)."
+  type        = number
+  default     = 8
+}
