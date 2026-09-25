@@ -14,16 +14,17 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it works and why.
 
 ## Run it natively
 
-Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12, [uv](https://docs.astral.sh/uv/) and an authenticated `gh` (for the model and data release assets).
 
 ```bash
 cp .env.example .env           # add OPENROUTER_API_KEY
 uv sync
+make models                    # the text-layer language model (159 MB), checked by sha256
 uv run jst route samples/      # manifests in out/
 uv run jst view out            # out/report.html: thumbnails, lanes and reasons
 uv run jst probe file.pdf      # the evidence for one page, without calling any model
 uv run jst evaluate            # route the labelled set in evalset/ and report accuracy
-uv run evalset/fresh/build.py fetch   # the 1,722-page fresh set, a release asset rather than files in git
+uv run evalset/fresh/build.py fetch   # the 1,717-page fresh set, a release asset rather than files in git
 uv run jst evaluate --cases evalset/fresh/cases.jsonl --out out/fresh
 uv run jst calibrate out/fresh/results.jsonl   # refit when to send a page to review; never fits on holdout
 ```

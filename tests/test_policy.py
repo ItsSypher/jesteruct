@@ -32,6 +32,7 @@ def evidence(pdf: bool = True) -> PageEvidence:
         ({"text_layer_trustworthy": 0.97}, "L1"),
         ({"text_layer_trustworthy": 0.97, "complex_layout": 0.9}, "L2"),
         ({"text_layer_trustworthy": 0.97, "has_math": 0.9}, "L2"),
+        ({"text_layer_trustworthy": 0.97, "complex_layout": 0.2, "has_code": 0.8}, "L2"),  # p4: a listing is complex
         ({}, "L3"),
         ({"camera_or_fax": 0.9}, "L4"),
         ({"heavily_degraded": 0.8}, "L4"),
@@ -66,13 +67,24 @@ def test_modifiers():
     ]
 
 
-def test_trust_rule_rejects_ocr_layers_and_garbage():
+def test_trust_rule_rejects_ocr_layers_and_garbage_in_any_language():
     ev = evidence()
-    ev.text_stats = TextStats(chars=3000, common_word_share=0.4)
+    ev.text_stats = TextStats(chars=3000, language="ind", readability=0.9)  # not English, still born-digital text
     assert policy.text_layer_trusted(ev)
     ev.pdf.invisible_text, ev.pdf.image_coverage = True, 1.0
     assert not policy.text_layer_trusted(ev)
     ev = evidence()
-    ev.text_stats = TextStats(chars=3000, common_word_share=0.0, cid_share=0.4)
+    ev.text_stats = TextStats(chars=3000, readability=0.05, unreadable="does not read as text in any language")
+    assert not policy.text_layer_trusted(ev)
+    ev.text_stats = TextStats(chars=3000, readability=0.9, cid_share=0.4)
     assert not policy.text_layer_trusted(ev)
     assert not policy.text_layer_trusted(evidence(pdf=False))
+
+
+def test_ocr_only_checks_a_pdf_text_layer():
+    ev = evidence()
+    ev.text_stats = TextStats(chars=3000, readability=0.05, unreadable="does not read as text in any language")
+    assert policy.needs_ocr(ev)
+    ev.text_stats = TextStats()
+    assert not policy.needs_ocr(ev)  # a scan without text: the vision check alone
+    assert not policy.needs_ocr(evidence(pdf=False))

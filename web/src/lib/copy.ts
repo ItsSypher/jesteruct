@@ -26,32 +26,33 @@ export function steps(info: Info | null): Record<Step, Explainer> {
     },
     probes: {
       title: 'Probes',
-      line: 'PDF structure, 1024 px render, quality, layout, text',
+      line: 'PDF structure, 1024 px render, quality, layout, language',
       measures:
-        'The PDF text layer and structure (image coverage, invisible OCR text, fonts, producer), a 1024 px render with sharpness, contrast, noise and colour, a small layout model for tables, formulas, figures and columns, and statistics of the text.',
-      why: 'Cheap facts, measured in a process pool in well under a second. A cheap rule then decides whether the text layer can be trusted.',
-      passes: 'The measurements, and whether the page needs OCR and a vision check.',
+        'The PDF text layer and structure (image coverage and hidden OCR text at any depth, fonts, producer), a 1024 px render with sharpness, contrast, noise and colour, a small layout model for tables, formulas, figures and columns, and the text layer’s language and whether it reads as language at all, in any of about 190 languages.',
+      why: 'Cheap facts: about 50 ms of CPU a page, in a process pool. A cheap rule then trusts a text layer that reads as language and is not an OCR layer over a scan.',
+      passes: 'The measurements, and whether the page needs a vision check.',
     },
     ocr: {
       title: 'OCR',
-      line: 'A quick text pass, only without a trusted layer',
+      line: 'Checks an untrusted PDF text layer against the page',
       measures:
-        'Text lines and their confidence, from Apple Vision on a Mac or RapidOCR in the containers. On a PDF page the fresh text is compared with the embedded layer.',
-      why: 'A text layer that disagrees with fresh OCR is usually OCR run over handwriting, or a garbled encoding.',
-      passes: 'Line count, confidence and agreement, for the evidence.',
+        'Text read from the page image (RapidOCR in the containers, Apple Vision on a Mac), compared word by word with the embedded layer, in any script.',
+      why: 'A layer that disagrees with the page is garbled, or OCR run over handwriting. Image files skip this step: the vision check judges them better than an OCR engine’s confidence does.',
+      passes: 'How well the layer agrees with the page, for the evidence.',
     },
     vision: {
       title: 'Vision',
       line: `${vision} looks at the page image`,
       measures:
         'How the page was captured (scan, photo, fax, screenshot), legibility, handwriting, defects such as photocopy artefacts or bleed-through, content such as tables and math, and the main script.',
-      why: 'The one step that looks at the page the way a person does. It is also the slowest, which is why pages wait here while born-digital pages skip it.',
+      why: 'The one step that looks at the page the way a person does, for every page without a trusted text layer. It is also the slowest, which is why pages wait here while born-digital pages skip it.',
       passes: 'Vision facts, for the evidence and the manifest.',
     },
     evidence: {
       title: 'Evidence',
       line: `Measurements put into words, frozen at ${info?.evidence ?? 'one version'}`,
-      measures: 'Every measurement is binned into fixed phrases: "sharp", "low contrast", "a full page of text", "no formula blocks".',
+      measures:
+        'Every measurement is binned into fixed phrases: "sharp", "low contrast", "reads as French text", "no formula blocks". OCR text itself is never shown: a fluent read of handwriting outvoted the vision check.',
       why: 'Jev reasons well over words and poorly over raw numbers. The wording is versioned and changes only together with an evaluation run.',
       passes: 'One paragraph of evidence per page.',
     },
@@ -66,7 +67,7 @@ export function steps(info: Info | null): Record<Step, Explainer> {
       title: 'Policy',
       line: 'Rule table, then calibrated review',
       measures:
-        'Handwriting first, then text-layer trust, then the image condition. The answers along the rule path become a calibrated probability that the lane is right.',
+        'Handwriting first, then text-layer trust, then the image condition. A trusted page with a table, code, a form, maths or columns is complex. The answers along the rule path become a calibrated probability that the lane is right.',
       why: `Below ${threshold} a page goes to human review (LH) and keeps its candidate lane: one review costs less than a page silently sent to the wrong lane.`,
       passes: 'The lane, modifiers and reasons, written to the manifest.',
     },

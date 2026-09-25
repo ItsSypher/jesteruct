@@ -2,7 +2,8 @@
 
 Jev answers narrow yes/no questions better than one multi-option lane choice (0.92-0.94 vs 0.80 lane accuracy in
 bench/jev_lanes/REPORT.md), so the lane is decided here, in code, from those answers. Modifier and continuation
-questions ride along in the same request. Question wording is part of POLICY_VERSION.
+questions ride along in the same request. Question wording is part of POLICY_VERSION: p4 (issue #9) sends a page to L2
+on any code, table, form or math answer, and words the degradation questions after the labelling rubric.
 """
 
 import hashlib
@@ -11,7 +12,7 @@ import json
 from .calibrate import Calibration
 from .models import Lane, PageEvidence, PageRoute, VisionFacts
 
-POLICY_VERSION = "p3"
+POLICY_VERSION = "p4"
 
 ROUTING_QUESTIONS = {
     "text_layer_trustworthy": {
@@ -19,19 +20,28 @@ ROUTING_QUESTIONS = {
         "instructions": "The page has a real embedded text layer created with the document (not an OCR layer over an "
         "image, not garbled), whose text can be used directly without OCR.",
     },
-    "mostly_handwritten": {"type": "noul", "instructions": "Most of the page content is handwritten."},
-    "camera_or_fax": {"type": "noul", "instructions": "The page image is a camera photo of a physical page or a fax."},
+    "mostly_handwritten": {
+        "type": "noul",
+        "instructions": "Most of the page content is handwritten. A printed form filled in by hand, or a printed page "
+        "with handwritten notes, marks or signatures, is not.",
+    },
+    "camera_or_fax": {
+        "type": "noul",
+        "instructions": "The page image is a camera photo of a physical page or a fax. A flatbed scan, a screenshot "
+        "or a digital render is neither.",
+    },
     "heavily_degraded": {
         "type": "noul",
-        "instructions": "The page image is clearly degraded for text recognition: blur, strong noise, fading, stains, "
-        "low contrast or warping.",
+        "instructions": "The page image is degraded enough to plausibly hurt a standard OCR engine: blur or low "
+        "resolution that makes characters soft or merged, heavy noise, fading, stains, low contrast, uneven lighting "
+        "or shadows, or warping.",
     },
     "capture_defects": {
         "type": "noul",
         "instructions": "The page image has defects that make some characters harder to read: photocopy artefacts "
         "(blotchy, broken or dithered strokes), bleed-through from the reverse side, curved or warped paper, heavy "
-        "speckle, or faded or broken characters. Light speckle, a paper tint, light banding or a faint watermark "
-        "behind crisp text do not count.",
+        "speckle, or faded or broken characters. Light speckle, a paper tint, light banding, a faint watermark, faint "
+        "show-through or light copy grain behind crisp text do not count.",
     },
     "complex_layout": {
         "type": "noul",
@@ -61,7 +71,7 @@ MODIFIER_QUESTIONS = {
 CONTINUATION_QUESTION = {
     "continues_previous": {
         "type": "noul",
-        "instructions": "This page's text (`embedded_text_sample` or `ocr_text_sample`) continues the same table, list "
+        "instructions": "This page's text (`embedded_text_sample`) continues the same table, list "
         "or sentence that ends `previous_page_text_sample`.",
     }
 }
@@ -77,37 +87,40 @@ def questions_hash() -> str:
 
 
 def text_layer_trusted(ev: PageEvidence) -> bool:
-    """Cheap rule: a PDF text layer that reads like real text and is not an OCR layer over a full-page image.
+    """Cheap rule: a PDF text layer that reads as language, in any language, and is not an OCR layer over a
+    full-page image (issue #7).
 
-    Pages that pass need no OCR and no vision check; everything else gets both.
+    Pages that pass need no OCR and no vision check; the rest get the vision check.
     """
     if ev.pdf is None:
         return False
     st = ev.text_stats
     ocr_layer = ev.pdf.invisible_text and ev.pdf.image_coverage > 0.9
-    return (
-        st.chars > 50
-        and not ocr_layer
-        and st.common_word_share >= 0.1
-        and st.cid_share < 0.05
-        and st.odd_char_share < 0.05
-    )
+    return st.chars > 50 and not ocr_layer and not st.unreadable and st.cid_share < 0.05 and st.odd_char_share < 0.05
+
+
+def needs_ocr(ev: PageEvidence) -> bool:
+    """For a page without a trusted text layer: fresh OCR only checks a PDF's untrusted layer against the page, since an
+    OCR layer over handwriting or a garbled encoding reads differently. Image files and PDF pages without text are
+    judged from the vision check, which reads handwriting and defects better than an OCR engine's confidence does."""
+    return ev.pdf is not None and ev.text_stats.chars > 0
 
 
 def _lane(a: dict[str, float]) -> tuple[Lane, float, list[str]]:
     """The rule table. Handwriting wins, then text-layer trust, then image condition.
 
-    Mathematical notation makes a page complex even when Jev reads the equations in `complex_layout` as displayed
-    ones only; inline notation needs a math-aware lane just the same.
+    A page is complex when Jev finds any structure that plain text extraction scrambles: `complex_layout`, or the
+    narrower code, table, form and math answers. Jev often reads `complex_layout` as columns and displayed equations
+    only, so a code listing, a borderless table, a form or inline notation needs its own answer to reach L2.
     """
     hw, tl = a.get("mostly_handwritten", 0.0), a.get("text_layer_trustworthy", 0.0)
-    cx = max(a.get("complex_layout", 0.0), a.get("has_math", 0.0))
+    cx = max(a.get(k, 0.0) for k in ("complex_layout", "has_code", "has_table", "is_form", "has_math"))
     bad = max(a.get(k, 0.0) for k in ("camera_or_fax", "heavily_degraded", "capture_defects"))
     if hw >= 0.5:
         return "L5", hw, [f"mostly handwritten ({hw:.2f})"]
     if tl >= 0.5:
         if cx >= 0.5:
-            return "L2", (1 - hw) * tl * cx, [f"trusted text layer ({tl:.2f})", f"complex layout or math ({cx:.2f})"]
+            return "L2", (1 - hw) * tl * cx, [f"trusted text layer ({tl:.2f})", f"complex layout ({cx:.2f})"]
         return "L1", (1 - hw) * tl * (1 - cx), [f"trusted text layer ({tl:.2f})", f"simple layout ({1 - cx:.2f})"]
     if bad >= 0.5:
         return (

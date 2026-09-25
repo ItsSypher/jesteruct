@@ -23,6 +23,9 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff check
       - run: uv run ruff format --check
+      - run: make models  # the text-layer language model, a release asset checked by sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: uv run pytest
 
   web:
@@ -61,6 +64,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+      - run: make models MODELS="$RUNNER_TEMP/models"
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/metadata-action@v6
         id: meta
@@ -76,6 +82,7 @@ jobs:
         id: build
         with:
           context: .
+          build-contexts: models=${{ runner.temp }}/models
           file: deploy/Dockerfile
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}

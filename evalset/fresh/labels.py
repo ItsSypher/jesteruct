@@ -1,8 +1,9 @@
 """Blind labels: the two rubrics, the label store, the merge rule and the packets labellers work from.
 
-Every opinion is one line of labels.jsonl: {"key", "labeller", "code", "why"}. Labellers A (Claude) and B (a model of
-another family, label_model.py) label every page; C adjudicates the pages where they disagree. Nobody sees a page's
-source, its metadata or another labeller's code.
+Every opinion is one line of labels.jsonl: {"key", "labeller", "rubric", "code", "why"}. Labellers A (Claude) and B (a
+model of another family, label_model.py) label every page; C adjudicates the pages where they disagree. Nobody sees a
+page's source, its metadata or another labeller's code. Only opinions given under a page's current rubric count; those
+given under a rubric the page was later moved off stay in the store.
 """
 
 import json
@@ -100,16 +101,17 @@ def load(path: Path) -> list[dict]:
 
 
 def append(path: Path, records: Iterable[dict]) -> int:
-    """Add opinions to the store. A labeller gives one opinion per page: repeats are skipped, changes refused."""
-    have = {(r["key"], r["labeller"]): r["code"] for r in load(path)}
+    """Add opinions to the store. A labeller gives one opinion per page and rubric; repeats are skipped, changes
+    refused."""
+    have = {(r["key"], r["labeller"], r["rubric"]): r["code"] for r in load(path)}
     new = []
     for r in records:
-        known = have.get((r["key"], r["labeller"]))
+        known = have.get((r["key"], r["labeller"], r["rubric"]))
         if known is not None and known != r["code"]:
             raise ValueError(f"{r['key']}: labeller {r['labeller']} already said {known!r}, now {r['code']!r}")
         if known is None:
-            have[(r["key"], r["labeller"])] = r["code"]
-            new.append({k: r[k] for k in ("key", "labeller", "code", "why")})
+            have[(r["key"], r["labeller"], r["rubric"])] = r["code"]
+            new.append({k: r[k] for k in ("key", "labeller", "rubric", "code", "why")})
     with path.open("a", encoding="utf-8") as fh:
         fh.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in new)
     return len(new)
@@ -157,9 +159,10 @@ def verdicts(store: list[dict], rubrics: dict[str, str]) -> dict[str, tuple[str,
     for r in store:
         if r["key"] not in rubrics:
             raise ValueError(f"a label for a page that is not in the corpus: {r['key']}")
-        if r["code"] not in CODES[rubrics[r["key"]]]:
-            raise ValueError(f"{r['key']}: {r['code']!r} is not a {rubrics[r['key']]} code")
-        codes.setdefault(r["key"], {})[r["labeller"]] = r["code"]
+        if r["code"] not in CODES[r["rubric"]]:
+            raise ValueError(f"{r['key']}: {r['code']!r} is not a {r['rubric']} code")
+        if r["rubric"] == rubrics[r["key"]]:
+            codes.setdefault(r["key"], {})[r["labeller"]] = r["code"]
     return {key: verdict(rubric, codes.get(key, {})) for key, rubric in rubrics.items()}
 
 
@@ -227,7 +230,15 @@ def read_packet_labels(packet_dir: Path, ids_file: Path, labeller: str, name: st
             page = ids[a["image"].removesuffix(".jpg")]
             if a["code"] not in CODES[page["rubric"]]:
                 raise ValueError(f"{batch}/{a['image']}: {a['code']!r} is not a {page['rubric']} code")
-            out.append({"key": page["key"], "labeller": labeller, "code": a["code"], "why": a.get("why", "")})
+            out.append(
+                {
+                    "key": page["key"],
+                    "labeller": labeller,
+                    "rubric": page["rubric"],
+                    "code": a["code"],
+                    "why": a.get("why", ""),
+                }
+            )
     if not out:
         raise ValueError(f"no labelled batches under {packet_dir}")
     return out

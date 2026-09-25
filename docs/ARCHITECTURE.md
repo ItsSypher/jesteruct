@@ -23,20 +23,20 @@ Runs of pages form segments, so a lane receives page ranges instead of single pa
 ## How a page is routed
 
 ```
-file ──► intake ──► per page: probes ──► [OCR + vision] ──► evidence ──► Jev ──► policy ──► segments ──► manifest
-          │                 (process pool)  (untrusted pages)   (words)    (1 call)  (rule table)
+file ──► intake ──► per page: probes ──► [vision (+ OCR check)] ──► evidence ──► Jev ──► policy ──► segments ──► manifest
+          │                 (process pool)  (pages without a trusted layer)  (words)   (1 call)  (rule table)
           └─ containers expand into child documents; bad inputs go to LQ
 ```
 
 1. `intake.py` sniffs each file by its bytes, expands zip and email containers into child documents, and applies limits.
-2. `probes/` measure the page cheaply:
-   - the PDF text layer and structure (image coverage, invisible OCR text, fonts, producer);
+2. `probes/` measure the page cheaply, in about 50 ms of CPU:
+   - the PDF text layer and structure (image coverage and hidden OCR text at any form depth, fonts, producer);
    - a 1024 px render with image-quality measures;
    - a small layout model's regions: tables, formulas, figures and a column estimate;
-   - text statistics.
-3. `policy.text_layer_trusted` is a cheap rule.
-   When a page has no trustworthy text layer, it gets a quick OCR pass and a Gemini 3.8 Flash vision check, run in parallel.
-   On a PDF page the fresh OCR is also compared with the embedded layer.
+   - text statistics, and the text layer's language and readability in any language (decision 18).
+3. `policy.text_layer_trusted` is a cheap rule: a layer that reads as language and is not an OCR layer over a scan.
+   Every other page gets a Gemini 3.8 Flash vision check.
+   A PDF page whose untrusted layer has text also gets a quick OCR pass, in parallel, compared with that layer; image files and scans without text get none (decision 14).
 4. `evidence.py` turns the measurements into short descriptions.
 5. One Jev request asks six routing questions, plus modifier, degradation and continuation questions.
 6. `policy.py` maps the routing answers to a lane with a fixed rule table.
@@ -46,29 +46,26 @@ file ──► intake ──► per page: probes ──► [OCR + vision] ──
 
 ## Measured
 
-`jst evaluate` with the shipped settings: evidence e3, policy p3, one page per Jev request and calibration `c2-2ecc2176bc` (M4 laptop, Apple Vision OCR, Gemini 3.8 Flash, 2026-09-25).
-`evalset/` holds the 98 cases the evidence was first tuned on; `evalset/fresh/` holds 1,722 cases labelled later, and its holdout split was never fitted on (decision 8).
+`jst evaluate` on the cloud path with the shipped settings: evidence e4, policy p4, one page per Jev request, calibration `c2-8a88087037`, RapidOCR for the layer check and Gemini 3.8 Flash (2026-09-25).
+`evalset/` holds the 98 cases the evidence was first tuned on; `evalset/fresh/` holds 1,717 cases labelled later, and its holdout split was never fitted on or looked at while e4 was developed (decision 8).
 
-| Metric | `evalset/` | `evalset/fresh/` holdout |
-|---|---|---|
-| Candidate lane right | 0.959 | 0.891 |
-| Sent to review (LH) | 17.3% | 24.0% |
-| Silent wrong lane (kept, and wrong) | 0.0% | 6.2% |
-| Silent under-routing (kept, and too weak) | 0.0% | 3.5% |
+| Metric | `evalset/` | `evalset/fresh/` holdout | e3 on the same holdout |
+|---|---|---|---|
+| Candidate lane right | 0.949 | 0.945 | 0.907 |
+| Candidate too weak | 2.0% | 2.4% | 5.1% |
+| Sent to review (LH) | 24.5% | 21.4% | 24.6% |
+| Silent wrong lane (kept, and wrong) | 1.0% | 2.8% | 4.3% |
+| Silent under-routing (kept, and too weak) | 1.0% | 1.4% | 1.8% |
 
-The grown set is harder than the first 396 fresh pages suggested.
-Those reach 0.929, while the pages added for issue #6, drawn towards the lane boundaries, reach 0.880 in tune and 0.891 in holdout.
-Born-digital PDFs are the weakest group, at 0.849 against 0.918 for image pages: 21 L2 pages go to L1, 17 L1 pages go to L2, and Jev trusts the text layer of 33 scanned pages.
-Most of the remaining mistakes are confident ones, which review cannot catch (decision 7); issue #9 collects them for the next evidence version.
+The e3 column is e3's RapidOCR run with its own calibration, scored on the corrected labels.
+On holdout, e4 gets 25 more candidate lanes right, halves the candidates that are too weak, and leaves a third fewer pages silently wrong while sending fewer to review.
+The gains come from reading text layers in any language (decision 18), from finding the OCR layers the e3 probe missed, from a rule table that uses Jev's own code, table, form and maths answers, and from dropping OCR evidence on image pages (decision 14).
 
-Latency and cost were measured on a cold cache on 2026-09-24, on the 98 cases and the first 396 fresh ones.
-Born-digital pages take 0.4 s at p50, and all pages 5.1-5.4 s at p50 and 14 s at p95, for about $2.70-2.80 per 1,000 pages; the vision call dominates both.
+Per page, the probes take about 50 ms of CPU, and the 7% of PDF pages whose layer is checked add about 1 s of OCR; under e3 every image page also ran OCR, 4-5 CPU-seconds.
+Latency and cost were last measured on a cold cache on 2026-09-24: born-digital pages take 0.4 s at p50, and pages that need the vision check about 5 s at p50 and 14 s at p95, for about $2.70-2.80 per 1,000 pages; the vision call dominates both, and e4 makes it on about 5% fewer pages.
 
-The same 1,722 pages sent through the OrbStack deployment with `jst evaluate --api`, where Linux workers use RapidOCR, routed as well as the Mac: 0.895 candidate accuracy on both, and 6.1% silently wrong on holdout against 6.2%.
-Their candidate lanes differed on 43 pages, 19 of which Apple Vision had right and 18 RapidOCR, so the OCR backend still does not change routing quality.
-Which pages differ is telling.
-RapidOCR reads handwritten Chinese notes fluently, and Jev then takes them for clean print (L3 rather than L5); Apple Vision's English-only pass fails on them, and that failure is what sends them to L5.
-KEDA took the workers from 0 to 8 on OrbStack's 10-CPU VM, where each used about one core and together they routed about two pages a second: on image pages the bound was CPU OCR, not Jev's request limit (decision 6).
+Sent through the OrbStack deployment with `jst evaluate --api`, all 1,717 fresh pages got the same candidate lane on the Linux workers as in the local run.
+With provider responses cached, so that only the router itself is measured, two workers routed about 7.7 pages a second over the run and 13 at peak; under e3, eight workers managed two, bound by OCR's CPU.
 
 `make smoke` on OrbStack Kubernetes (router v1 with evidence e1):
 - 43 real documents went through the API.
@@ -120,6 +117,18 @@ Born-digital pages improved on both sets: 15 to 16 of 17 right on `evalset/`, an
 On vision-checked pages their too-weak candidates fell from 17 to 8 of 308, while `evalset/` lost 3 of 81; e2 was perfect there, having been tuned on it.
 Across all 494 labelled pages, 466 candidate lanes are right against 458, and too-weak candidates fall from 28 to 12.
 
+Version e4 (issue #9), with policy p4, closes the gaps the grown fresh set exposed, and was developed on its tune split alone:
+- OCR text no longer reaches Jev (decision 14).
+  RapidOCR reads handwritten Chinese as fluently as print, and a fluent read outvoted the vision check's own finding of handwriting.
+- The vision check is put in plain phrases, such as "some characters are harder to read", "a flatbed scan, not a camera photo or fax" and "a printed page with only handwritten notes", where raw values like `mild_issues` and `annotations_only` let Jev hedge.
+  Soft defects (copy grain, show-through, speckle, fading) are left out when the vision check reads the text as clean, as the labelling rubric counts them clean.
+- The PDF probe finds OCR layers at any form depth and under a covering image, with image coverage in page space, and says when a page has no mathematical fonts or symbols.
+  When the layout model finds no text, the text layer's own column estimate stands.
+- Text layers are described by the language they read as, in any language, instead of by English words (decision 18).
+- Policy p4 counts Jev's code, table and form answers as complex layout, and words `heavily_degraded`, `camera_or_fax` and `mostly_handwritten` after the labelling rubric.
+
+On the 1,161 tune and `evalset/` pages, candidate accuracy rose from 0.920 to 0.945 and too-weak candidates fell from 4.8% to 3.4%; holdout agreed (Measured).
+
 **3. A small layout model, not a large one.**
 The projection-profile column estimate e1 used read slide bullets as columns.
 360LayoutAnalysis's YOLOv8n "general6" detector, run through rapid-layout on ONNX Runtime, takes about 20 ms a page on one CPU thread.
@@ -133,14 +142,17 @@ Licences are not a constraint for now; this one needs settling before commercial
 **4. Vision only where the text layer cannot be trusted.**
 Skipping the vision check on pages whose text layer passes the cheap rule cost no accuracy in the benchmark.
 On real corpora, most pages are born-digital, and those pages then cost one Jev call.
+Since e4 the rule trusts layers in any language (decision 18); on the tune set that saved the vision call on 5% of pages, and on a corpus in another language it saves it on nearly every born-digital page.
 
 **5. One provider gateway, cached and rate limited.**
 Jev and Gemini both go through OpenRouter in `providers.py`.
 Every response is cached in the object store under a hash of its request, so replays are free and deterministic.
 A GCRA limiter in Valkey shares each provider's request budget across all replicas.
 
-**6. Capacity is bounded by Jev's request limit.**
-At 1,000 requests a minute (below Jev's 1,200), the whole system routes about 16 pages a second, so KEDA caps workers at 6.
+**6. Capacity is bounded by the providers' request limits.**
+At 1,000 Jev requests a minute (below its 1,200) the whole system routes about 16 pages a second, and the vision model's 600 a minute bound pages that need it to 10 a second.
+A page needs about 50 ms of CPU and then waits seconds on those calls, so a worker holds 32 pages in flight (`JST_PAGE_CONCURRENCY`, and as many documents), three to six workers reach the limits, and KEDA caps workers at 6.
+Under e3 every image page also ran OCR, 4-5 CPU-seconds, and eight workers on OrbStack's 10-CPU VM routed about two pages a second.
 `JST_JEV_BATCH_SIZE` packs several pages into one request, which multiplies that ceiling, but it costs quality, so the default is one page (issue #2).
 Three cold runs of the 98 cases at each size measured it:
 
@@ -163,30 +175,32 @@ It is fitted on the fresh set's tune split alone, and on its holdout split:
 
 | Review rule | Sent to review | Silent wrong lane | Silent under-routing |
 |---|---|---|---|
-| Raw product below 0.5 | 3.3% | 9.4% | 5.0% |
-| Calibrated, r = 5 | 8.7% | 8.1% | 4.6% |
-| Calibrated, r = 10 (shipped) | 24.0% | 6.2% | 3.5% |
-| Calibrated, r = 20 | 54.7% | 1.4% | 0.8% |
+| Raw product below 0.5 | 1.4% | 5.2% | 2.3% |
+| Calibrated, r = 5 | 2.5% | 4.9% | 2.1% |
+| Calibrated, r = 10 (shipped) | 21.4% | 2.8% | 1.4% |
+| Calibrated, r = 20 | 24.6% | 2.6% | 1.2% |
 
-The previous calibration, fitted on the first 494 labelled pages, reviewed 13.4% of holdout and left 7.3% silently wrong: the same cost at r = 10, with more of it silent.
-Five-fold cross-validation on tune found no curve shape that generalises better; per lane or pooled, isotonic or logistic, all cost 0.62-0.70 per page at r = 10, counting a review as 1 and a silent wrong lane as 10.
-Calibration cannot catch a confident mistake, and most of the remaining ones are confident.
-For L2 candidates the raw product hardly separates right from wrong (AUC 0.56, against 0.74-0.89 for the other lanes), so the next gain has to come from the evidence (issue #9).
+Under e3 the same rule reviewed 24.6% of holdout and left 4.3% silently wrong.
+Five-fold cross-validation on tune found no curve shape that generalises better; per lane or pooled, isotonic or logistic, all cost 0.62-0.70 per page at r = 10 under e3, counting a review as 1 and a silent wrong lane as 10.
+Calibration cannot catch a confident mistake, so the gains came from the evidence (decision 2).
+Under e3 the raw product hardly separated right from wrong on L2 candidates (AUC 0.56), but mostly because 16 born-digital pages had been labelled as scans (decision 8); counted right, their AUC was 0.83.
 `jst calibrate --cost-ratio` refits for a different trade-off.
 A calibration records the answer basis it was fitted on: evidence and policy versions, question set, models and batch size.
 The router applies it only on the same basis and otherwise falls back to `review_threshold` with a warning, so an evidence change never runs under a stale curve.
-The OCR backend is left out of the basis because it does not change routing, so the curve fitted on the Mac also serves the Linux containers.
+The OCR backend is left out of the basis because it does not change routing, so one curve serves the Linux containers and a Mac.
 
 **8. Two labelled sets, labels that can be sets, and a holdout.**
 `evalset/` (98 cases) tuned evidence e1 and e2.
-`evalset/fresh/` (1,722 cases from public benchmarks and web documents, rebuilt byte for byte by `evalset/fresh/build.py`) was labelled afterwards, disjoint from it, to calibrate review and to check evidence changes (issues #3 and #6).
+`evalset/fresh/` (1,717 cases from public benchmarks and web documents, rebuilt byte for byte by `evalset/fresh/build.py`) was labelled afterwards, disjoint from it, to calibrate review and to check evidence changes (issues #3 and #6).
 Every page is labelled blind, from the image the router sees and with nothing that names its source.
+Born-digital PDF pages are judged on layout and every other page on capture; the rule is structural (`sources.text_layer`), since the first one also asked for 200 characters and under 1% odd characters, and sent 35 born-digital pages with TeX glyphs or little text to the capture rubric as clean scans (issue #9).
+They were relabelled blind on the layout rubric, and each opinion records the rubric it was given under.
 Labeller A is Claude and labeller B a model of another family (`openai/gpt-6-luna-pro`); where they disagree, adjudicator C, also blind, decides.
 Where a lane is genuinely arguable, the label is a set such as L3/L4, and either lane counts as right: opinions that differ across only one boundary give the set.
-A and B agreed on 74.5% of the capture pages and 93.4% of the layout pages (`evalset/fresh/LICENSES.md` has the rest).
+A and B agreed on 73.9% of the capture pages and 93.7% of the layout pages (`evalset/fresh/LICENSES.md` has the rest).
 The set is split once, by source document, and `split.json` never changes.
-`tune` (1,064 cases) holds all of the first build's 396, which shaped e3, and half of the new pages; the calibration is fitted on it and evidence is developed against it.
-`holdout` (658 new cases, drawn towards the L3/L4 and L1/L2 boundaries) is never fitted on, so its numbers are the ones that count.
+`tune` (1,063 cases) holds all of the first build's pages, which shaped e3, and half of the new ones; the calibration is fitted on it and evidence is developed against it.
+`holdout` (654 new cases, drawn towards the L3/L4 and L1/L2 boundaries) is never fitted on or studied, so its numbers are the ones that count.
 An evidence or policy change is judged on `evalset/` and both splits.
 The page files (281 MB) are the release asset `evalset-fresh-v2`, which `build.py fetch` downloads and checks against every case's sha256.
 
@@ -218,8 +232,13 @@ All work flows through the queue, so API pods stay light and KEDA sees every pag
 pdfium is not thread-safe, and a hostile PDF can crash its process.
 pebble gives per-task timeouts, replaces crashed workers and recycles processes.
 The pool size comes from the container's CPU limit.
+Each process loads the language model (about 200 MB) when it first reads a text layer.
 
-**14. OCR differs by platform, behind one function.**
+**14. OCR only checks an untrusted PDF text layer, and differs by platform behind one function.**
+On image pages OCR evidence did not help: without it, 736 tune and `evalset/` image pages routed as accurately (0.920 against 0.921) and too-weak candidates fell from 4.5% to 2.9%, because a fluent read of handwriting outvoted the vision check.
+Image files and scans without a text layer therefore get no OCR, which was 4-5 CPU-seconds a page.
+On a PDF page whose layer is not trusted it still earns its keep: without the check, Jev trusted 3 of 33 garbled layers, so the page is read again and compared with its layer, word by word in any script.
+PP-OCRv6's tiny models, without the text-angle classifier, route those pages exactly as the small ones did at a fifth of the CPU (about 1 s a page).
 Apple Vision runs natively on macOS, and RapidOCR (ONNX) runs in Linux containers.
 The backend is part of the route key.
 `auto` first checks, once and in a child process, that Apple Vision answers, and falls back to RapidOCR when it does not.
@@ -249,6 +268,25 @@ Text and controls are HTML over the canvas, so they stay crisp and accessible.
 Measured in headless Chrome during a demo: 0.07 ms of script per frame at p50 with WebGPU (0.10 ms with Canvas 2D), 17.7 ms frame interval at p99, and 36 kB of JavaScript gzipped.
 The flow is fed by the event stream of decision 16; a document routed before is replayed from its manifest's recorded timings, and with no API it replays a recorded demo.
 
-**18. Deliberately not in v1:**
+**18. Text layers are read in any language.**
+The cheap rule used to ask for English common words, so a born-digital page in any other language paid for the vision check (issue #7), and the evidence told Jev such a layer had few recognisable words.
+`probes/language.py` asks OpenLID-v3 (HPLT; GPL-3.0) which of about 190 languages a layer reads as, in chunks of about 80 characters weighted by their letters.
+The model has a label for text that is no language, so the letter-weighted probability of real language is near 0 for a garbled layer in any script and near 1 for text; a layer reads at 0.2 or more.
+Two guards come first: control or undefined characters, and, in scripts written with spaces, words that are single letters or run together.
+A language is named only when it holds most of the weight: source code, say, reads as text but scatters over languages.
+Measured on the tune split and `evalset/` against 11 other methods, including lid.176, CLD2, CLD3, GlotLID, lingua and Datalab's text-error model, it trusted the most born-digital layers and the fewest garbled ones:
+
+| Readability rule | Born-digital layers distrusted (of 299) | Real garbled layers trusted (of 34) | Synthetic garbles trusted (of 2,690) |
+|---|---|---|---|
+| English common words (e3) | 44 | 1 | 252 |
+| Structural heuristics | 7 | 0 | 428 |
+| lid.176 confidence | 6 | 0 | 304 |
+| OpenLID-v3 readability (e4) | 1 | 0 | 72 |
+
+It costs about 5 ms of CPU a page.
+HPLT publishes the model at 1.2 GB, so `scripts/openlid.py` quantises it without retraining to 159 MB, keeping every word, since a 200k-word cut let twice as many garbles through.
+Quantising on another platform changes its last bits and changed the evidence on 7 of 422 dev layers, so every environment uses one file: the release asset `openlid-v3-pq1`, which `make models` fetches and the image checks by sha256.
+
+**19. Deliberately not in v1:**
 - lane executors (the processing itself);
 - a learned router: Jev is the classifier, and its terms bar training on its outputs.
