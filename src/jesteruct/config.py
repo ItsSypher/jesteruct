@@ -29,10 +29,11 @@ class Settings(BaseSettings):
     review_threshold: float = 0.5  # raw path probability below this sends a page to LH when no calibration is loaded
     use_calibration: bool = True  # decide review on the shipped calibration (src/jesteruct/calibration.json)
     ocr_backend: Literal["auto", "apple", "rapid"] = "auto"
+    lid_model: str = "~/.cache/jesteruct/openlid-v3.ftz"  # the text-layer language model; `make models` fetches it
 
     # execution
     cpu_workers: int = 0  # 0 means os.cpu_count(); set from the container CPU limit in Kubernetes
-    page_concurrency: int = 8
+    page_concurrency: int = 32  # pages in flight per router: each waits seconds on the vision model, probes in 50 ms
     probe_timeout_s: float = 60
 
     # intake limits
@@ -50,7 +51,7 @@ class Settings(BaseSettings):
     valkey_url: str | None = None
     stream: str = "jst:jobs"
     group: str = "workers"
-    worker_max_docs: int = 2
+    worker_max_docs: int = 32  # as many as page_concurrency, so single-page documents fill a worker's page slots
     max_deliveries: int = 3
     max_backlog: int = 1000
     claim_idle_s: int = 120
