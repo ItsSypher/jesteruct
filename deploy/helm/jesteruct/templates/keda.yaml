@@ -4,8 +4,7 @@
 {{- $conn := dict
   "address" (ternary $u.host (printf "%s:6379" $u.host) (contains ":" $u.host))
   "databaseIndex" (trimPrefix "/" $u.path | default "0")
-  "stream" .Values.queue.stream
-  "consumerGroup" .Values.queue.group }}
+  "stream" .Values.queue.stream }}
 {{- if eq $u.scheme "rediss" }}
 {{- $_ := set $conn "enableTLS" "true" }}
 {{- end }}
@@ -37,10 +36,11 @@ spec:
   cooldownPeriod: {{ .Values.keda.cooldownSeconds }}
   pollingInterval: {{ .Values.keda.pollingInterval }}
   triggers:
-    # Backlog: documents not yet handed to any worker.
+    # Unfinished work: acked messages are deleted, so the stream's length is every document queued or in progress.
+    # (The consumer group's lag would say the same, but Valkey cannot report it once entries have been deleted.)
     - type: redis-streams
       metadata:
-        {{- toYaml (merge (dict "lagCount" (toString .Values.keda.lagCount) "activationLagCount" "0") $conn) | nindent 8 }}
+        {{- toYaml (merge (dict "streamLength" (toString .Values.keda.documentsPerWorker)) $conn) | nindent 8 }}
       {{- if .Values.valkeyPassword.existingSecret }}
       authenticationRef:
         name: {{ $name }}
@@ -48,7 +48,7 @@ spec:
     # In flight: one replica per maxDocs unacknowledged documents, so busy workers are not scaled away.
     - type: redis-streams
       metadata:
-        {{- toYaml (merge (dict "pendingEntriesCount" (toString .Values.worker.maxDocs)) $conn) | nindent 8 }}
+        {{- toYaml (merge (dict "pendingEntriesCount" (toString .Values.worker.maxDocs) "consumerGroup" .Values.queue.group) $conn) | nindent 8 }}
       {{- if .Values.valkeyPassword.existingSecret }}
       authenticationRef:
         name: {{ $name }}
