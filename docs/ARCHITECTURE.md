@@ -82,10 +82,11 @@ One library, two ways to run it.
 ```
 client ─► API ─► object store (inputs/)            workers ─► object store (manifests/, thumbs/, cache/)
             └──► Valkey stream jst:jobs ──────────► ▲  scaled by KEDA on stream lag
+Studio ◄── API ◄── Valkey stream jst:events ◄──────── workers report each page's progress
 ```
 
 The object store holds everything durable: inputs, manifests, thumbnails and the provider response cache.
-Valkey holds only coordination: the job stream, job status and the shared rate limiter.
+Valkey holds only coordination: the job stream, job status, the shared rate limiter and the capped stream of progress events.
 Kubernetes resources come from two Helm charts: `deploy/helm/jesteruct` for the app, and `deploy/helm/devstack` with Valkey and SeaweedFS for local use.
 Terraform installs them onto any cluster (`infra/terraform/envs/local` for OrbStack, `envs/cloud` for managed services).
 
@@ -220,6 +221,20 @@ Constraints:
 - Valkey must run without cluster mode, because the queue's scripts touch the job hash and the stream together.
 - The local environment passes the OpenRouter key to Terraform, so its gitignored state file holds it. Cloud environments reference an existing secret instead.
 
-**16. Deliberately not in v1:**
+**16. Live progress is a capped Valkey stream, relayed as Server-Sent Events.**
+Workers append one event per step to `jst:events`: the job's lifecycle, each document found, and each page's probe, OCR, vision, Jev and policy steps with their timings and what each measured.
+The stream is capped at 20,000 events, a few minutes at full throughput and about 30 MB of Valkey memory, because it is a live feed; manifests remain the record.
+Each API process reads the stream once and fans it out at `GET /v1/events`, replaying recent history first, so a viewer can join late, and resuming by `Last-Event-ID` after a dropped connection.
+Server-Sent Events rather than WebSockets, because the flow is one way, it is plain HTTP through any ingress, and browsers reconnect and resume on their own.
+Events are advisory: emitting is one XADD, a failure to emit is logged and never fails a job, and events never carry page text.
+
+**17. The Studio is static files that the API serves.**
+It is built into the same image and served at `/` from `JST_WEB_DIR`, so there is one origin, no CORS and nothing new to deploy or scale; an Ingress (optional in the chart) exposes both.
+It is Svelte 5 with no component library, and the flow is drawn by hand-written WGSL on WebGPU in two instanced draws a frame, falling back to Canvas 2D when WebGPU is missing or its device is lost.
+Text and controls are HTML over the canvas, so they stay crisp and accessible.
+Measured in headless Chrome during a demo: 0.07 ms of script per frame at p50 with WebGPU (0.10 ms with Canvas 2D), 17.7 ms frame interval at p99, and 36 kB of JavaScript gzipped.
+The flow is fed by the event stream of decision 16; a document routed before is replayed from its manifest's recorded timings, and with no API it replays a recorded demo.
+
+**18. Deliberately not in v1:**
 - lane executors (the processing itself);
 - a learned router: Jev is the classifier, and its terms bar training on its outputs.

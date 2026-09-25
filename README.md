@@ -35,6 +35,23 @@ JST_VALKEY_URL=redis://localhost:6379/0 uv run jst serve
 curl -F file=@doc.pdf 'localhost:8000/v1/jobs?wait=30'
 ```
 
+## Studio
+
+The Studio shows pages moving through the router as it works, and routes any file you drop on it.
+
+```bash
+make studio          # builds web/, then runs Valkey, a worker and the API: http://localhost:8000
+make studio-cluster  # the Studio of the OrbStack deployment, after make deploy-local
+```
+
+To work on it, run the API as above and `cd web && pnpm install && pnpm dev`; Vite proxies `/v1` to port 8000.
+With no API reachable, it replays a recorded demo.
+
+| Dark | Light |
+|---|---|
+| ![The flow, dark](docs/images/studio-dark.png) | ![The flow, light](docs/images/studio-light.png) |
+| ![Results, dark](docs/images/studio-dark-results.png) | ![Results, light](docs/images/studio-light-results.png) |
+
 ## Deploy
 
 ```bash
@@ -50,6 +67,7 @@ CI publishes multi-arch images to `ghcr.io/itssypher/jesteruct`.
 | Path | Contents |
 |---|---|
 | `src/jesteruct/` | the router |
+| `web/` | the Studio: Svelte and WebGPU, served by the API |
 | `evalset/` | labelled pages for `jst evaluate` |
 | `deploy/` | Dockerfile and Helm charts |
 | `infra/terraform/` | modules and environments |

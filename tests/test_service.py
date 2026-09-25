@@ -2,12 +2,11 @@
 
 import asyncio
 import hashlib
+import json
 import shutil
 import socket
 import subprocess
-import sys
 import time
-import types
 import uuid
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from jesteruct.api import create_app
 from jesteruct.config import Settings
+from jesteruct.events import NO_EVENTS, STREAM, Events, Hub, valkey_sink
 from jesteruct.models import Doc, JobIndex, Manifest, PageRoute, Segment, Versions
 from jesteruct.queue import DEAD, JobQueue, connect
 from jesteruct.store import Store, input_key, job_key, manifest_key
@@ -98,8 +98,9 @@ class FakeRouter:
         self.manifests, self.error, self.gate = list(manifests), error, gate
         self.calls: list[tuple[str, bytes, str | None]] = []
 
-    async def route_file(self, path: Path, name: str | None = None) -> list[Manifest]:
+    async def route_file(self, path: Path, name: str | None = None, events: Events = NO_EVENTS) -> list[Manifest]:
         self.calls.append((path.name, path.read_bytes(), name))
+        await events("doc", doc_sha=DOC_SHA, name=name)
         if self.gate:
             await self.gate.wait()
         if self.error:
@@ -169,6 +170,8 @@ async def test_dead_letter_after_max_deliveries(settings, valkey):
     [(_, dead)] = await valkey.xrange(DEAD)
     assert dead["job_id"] == "j1"
     assert await valkey.xlen(settings.stream) == 0
+    [(_, event)] = await valkey.xrange(STREAM)
+    assert (event["t"], json.loads(event["e"])["status"]) == ("job.done", "failed")
 
 
 @pytest.mark.anyio
@@ -179,8 +182,9 @@ async def test_process_publishes_manifests_and_index(settings, valkey):
     [d] = await queue.read(1, block_ms=10)
     router = FakeRouter([make_manifest(["L1", "L3", "L1"])])
 
-    await process(d, router, store, queue)
+    await process(d, router, store, queue, valkey_sink(valkey))
 
+    assert [fields["t"] for _, fields in await valkey.xrange(STREAM)] == ["job.started", "doc", "job.done"]
     assert router.calls == [("scan.pdf", b"%PDF", "scan.pdf")]
     assert await store.get_model(manifest_key(DOC_SHA, "rk"), Manifest) == router.manifests[0]
     index = await store.get_model(job_key("j1"), JobIndex)
@@ -198,8 +202,9 @@ async def test_failed_attempt_stays_pending(settings, valkey):
     await queue.enqueue("j1", input_key("abc"), "scan.pdf")
     [d] = await queue.read(1, block_ms=10)
 
-    await process(d, FakeRouter(error=RuntimeError("provider down")), store, queue)
+    await process(d, FakeRouter(error=RuntimeError("provider down")), store, queue, valkey_sink(valkey))
 
+    assert [fields["t"] for _, fields in await valkey.xrange(STREAM)] == ["job.started", "doc", "job.retry"]
     job = await queue.status("j1")
     assert (job["status"], job["error"]) == ("queued", "RuntimeError: provider down")
     assert (await valkey.xpending(settings.stream, settings.group))["pending"] == 1
@@ -228,18 +233,41 @@ async def test_consume_finishes_inflight_work_on_stop(settings, valkey):
     assert (await queue.status("j2"))["status"] == "queued"
 
 
-def test_api_submit_is_idempotent(settings, monkeypatch):
+@pytest.mark.anyio
+async def test_hub_replays_recent_history_then_streams_live_events(valkey):
+    sink = valkey_sink(valkey)
+    await Events(sink, "j1")("job.queued", name="a.pdf", size=4)
+    await Events(sink, "j2")("job.queued", name="b.pdf", size=5)
+    hub = Hub(valkey)
+    await hub.start()
+
+    async def next_event(messages):
+        while (message := await anext(messages)) is None:  # skip keepalives
+            pass
+        return message
+
     try:
-        from jesteruct.pipeline import route_key
-    except ImportError:  # the pipeline is not importable in this checkout yet
+        async with hub.subscribe(last=1) as messages:
+            replayed = await next_event(messages)
+            await Events(sink, "j3")("job.started", deliveries=1)
+            live = await next_event(messages)
+        async with hub.subscribe(after=replayed[0]) as messages:  # a browser resuming by Last-Event-ID
+            resumed = await next_event(messages)
+    finally:
+        await hub.stop()
 
-        def route_key(_settings):
-            return "0123456789abcdef"
+    assert (replayed[1]["j"], live[1]["t"], json.loads(live[1]["e"])["deliveries"]) == ("j2", "job.started", 1)
+    assert resumed == live
 
-        monkeypatch.setitem(sys.modules, "jesteruct.pipeline", types.SimpleNamespace(route_key=route_key))
+
+def test_api_submit_is_idempotent(settings, tmp_path):
+    from jesteruct.pipeline import route_key
+
     job_id = f"{hashlib.sha256(b'hello').hexdigest()[:16]}-{route_key(settings)[:8]}"
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "index.html").write_text("<!doctype html><title>Studio</title>")
 
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings.model_copy(update={"web_dir": str(tmp_path / "web")}))) as client:
         files = {"file": ("hello.txt", b"hello", "text/plain")}
         first, second = client.post("/v1/jobs", files=files), client.post("/v1/jobs", files=files)
         assert (first.status_code, second.status_code) == (202, 202)
@@ -249,9 +277,16 @@ def test_api_submit_is_idempotent(settings, monkeypatch):
             == {"job_id": job_id, "status": "queued", "links": {"self": f"/v1/jobs/{job_id}"}}
         )
         assert first.headers["location"] == f"/v1/jobs/{job_id}"
-        assert redis.Redis.from_url(settings.valkey_url).xlen(settings.stream) == 1
+        valkey = redis.Redis.from_url(settings.valkey_url, decode_responses=True)
+        assert valkey.xlen(settings.stream) == 1
+        assert [fields["t"] for _, fields in valkey.xrange(STREAM)] == ["job.queued"]  # once, for the new job
 
         assert client.get(f"/v1/jobs/{job_id}").json()["status"] == "queued"
         assert client.get("/v1/jobs/unknown").status_code == 404
         assert client.get(f"/v1/manifests/{DOC_SHA}").status_code == 404
+        assert client.get(f"/v1/thumbs/{DOC_SHA}/0").status_code == 404
+        info = client.get("/v1/info").json()
+        assert info["route_key"] == route_key(settings) and info["questions"]["capture_defects"]["group"] == "routing"
+        assert len(info["questions"]["degradation"]["criteria"]) == 4  # the score's scale, for the Studio's labels
         assert client.get("/readyz").status_code == 200
+        assert "<title>Studio</title>" in client.get("/").text  # the Studio, behind the API routes

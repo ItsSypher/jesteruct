@@ -1,5 +1,14 @@
 # syntax=docker/dockerfile:1
-# One image for the API and the workers: `jst serve` (default) or `jst worker`.
+# One image for the API and the workers: `jst serve` (default) or `jst worker`. The API also serves the Studio.
+
+# The Studio is static files, the same on every architecture, so it is built once on the build platform.
+FROM --platform=$BUILDPLATFORM node:24-slim AS web
+RUN npm install --global pnpm@11
+WORKDIR /web
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY web/ ./
+RUN pnpm build
 
 FROM ghcr.io/astral-sh/uv:0.11-python3.12-trixie-slim AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
@@ -46,11 +55,13 @@ LABEL org.opencontainers.image.source=https://github.com/ItsSypher/jesteruct
 
 RUN useradd --uid 10001 --user-group --create-home --home-dir /home/jst jst
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=web /web/dist /app/web
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    JST_OCR_BACKEND=rapid
+    JST_OCR_BACKEND=rapid \
+    JST_WEB_DIR=/app/web
 
 USER 10001:10001
 WORKDIR /home/jst

@@ -54,4 +54,10 @@ module "app" {
   api_replicas      = var.api_replicas
   worker_max_docs   = var.worker_max_docs
   keda_max_replicas = var.keda_max_replicas
+
+  ingress = {
+    host       = var.ingress_host
+    class_name = var.ingress_class_name
+    tls_secret = var.ingress_tls_secret
+  }
 }

@@ -1,0 +1,85 @@
+/* One set of tokens for the page, the charts and the shaders (which read them as uniforms on every theme switch).
+   Lane colours are one categorical palette validated for both modes (adjacent pairs clear the CVD and normal-vision
+   floors in lane order), and always travel with the lane code as text, never alone. */
+
+:root {
+  color-scheme: light;
+  --bg: #f4f4f1;
+  --surface: #fbfbf9;
+  --surface-2: #ebeae5;
+  --ink: #1a1a19;
+  --ink-2: #52514e;
+  --ink-3: #6c6b66;
+  --rule: #1a1a19;
+  --rule-soft: #d7d6cf;
+  --edge: #c4c3bb;
+  --dot: #d2d1ca;
+  --particle: #6f6e69;
+  --focus: #2a78d6;
+
+  --lane-L0: #008300;
+  --lane-L1: #e87ba4;
+  --lane-L2: #eda100;
+  --lane-L3: #1baf7a;
+  --lane-L4: #eb6834;
+  --lane-L5: #4a3aa7;
+  --lane-LQ: #e34948;
+  --lane-LH: #2a78d6;
+
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --gutter: clamp(16px, 4vw, 56px);
+  --ease: cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0e0f10;
+    --surface: #151618;
+    --surface-2: #1e1f22;
+    --ink: #eeede8;
+    --ink-2: #b1b0a8;
+    --ink-3: #8a8982;
+    --rule: #eeede8;
+    --rule-soft: #2a2b2e;
+    --edge: #37383c;
+    --dot: #232427;
+    --particle: #9c9b94;
+    --focus: #3987e5;
+
+    --lane-L0: #008300;
+    --lane-L1: #d55181;
+    --lane-L2: #c98500;
+    --lane-L3: #199e70;
+    --lane-L4: #d95926;
+    --lane-L5: #9085e9;
+    --lane-LQ: #e66767;
+    --lane-LH: #3987e5;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0e0f10;
+  --surface: #151618;
+  --surface-2: #1e1f22;
+  --ink: #eeede8;
+  --ink-2: #b1b0a8;
+  --ink-3: #8a8982;
+  --rule: #eeede8;
+  --rule-soft: #2a2b2e;
+  --edge: #37383c;
+  --dot: #232427;
+  --particle: #9c9b94;
+  --focus: #3987e5;
+
+  --lane-L0: #008300;
+  --lane-L1: #d55181;
+  --lane-L2: #c98500;
+  --lane-L3: #199e70;
+  --lane-L4: #d95926;
+  --lane-L5: #9085e9;
+  --lane-LQ: #e66767;
+  --lane-LH: #3987e5;
+}

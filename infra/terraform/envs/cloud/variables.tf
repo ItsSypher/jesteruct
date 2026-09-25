@@ -88,3 +88,20 @@ variable "keda_max_replicas" {
   type    = number
   default = 6
 }
+
+variable "ingress_host" {
+  description = "Serve the API and the Studio at this host through the cluster's ingress controller; empty for none."
+  type        = string
+  default     = ""
+}
+
+variable "ingress_class_name" {
+  type    = string
+  default = ""
+}
+
+variable "ingress_tls_secret" {
+  description = "An existing TLS Secret for ingress_host, for example one cert-manager issues."
+  type        = string
+  default     = ""
+}
