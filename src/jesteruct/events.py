@@ -21,6 +21,7 @@ STREAM = "jst:events"
 MAXLEN = 20_000  # a few minutes at full throughput, about 30 MB: a live feed; the manifests are the record
 QUEUE = 2_000  # events buffered per browser; a viewer that falls this far behind is dropped and reconnects
 KEEPALIVE_S = 15.0
+BLOCK_MS = 10_000  # how long the pump waits on Valkey for new events; queue.SOCKET_TIMEOUT_S must exceed it
 
 Event = dict[str, object]
 Sink = Callable[[Event], Awaitable[None]]
@@ -81,7 +82,7 @@ class Hub:
     async def _pump(self, last: str) -> None:
         while True:
             try:
-                reply = await self._valkey.xread({STREAM: last}, count=500, block=10_000)
+                reply = await self._valkey.xread({STREAM: last}, count=500, block=BLOCK_MS)
             except RedisError:
                 log.warning("event stream unavailable", exc_info=True)
                 await asyncio.sleep(1)
