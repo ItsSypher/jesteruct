@@ -309,30 +309,27 @@ def _odd_share(text: str) -> float:
     return sum(unicodedata.category(c) in ("Co", "Cn", "Cc") or c == "�" for c in body) / max(1, len(body))
 
 
-def text_layer_ok(text: str) -> bool:
-    """A real, readable text layer: enough text, no cid glyph codes, few unmapped or control characters."""
-    return (
-        len("".join(text.split())) >= 200
-        and "(cid:" not in text
-        and _odd_share(text) < 0.01
-        and len(re.findall(r"[^\W\d_]{2,}", text)) >= 30
-    )
+TEXT_LAYER_RULE = "structural-2"  # part of every cached verdict, so a rule change never reuses old ones
 
 
 def text_layer(path: Path) -> str:
-    """ "trusted" for a born-digital page with a readable layer; otherwise why the page needs OCR: "none", "ocr" (an
-    OCR layer over a full-page image) or "garbled"."""
+    """ "trusted" for a born-digital page; otherwise why the page needs OCR: "none", "ocr" (an OCR layer over a
+    full-page image) or "garbled".
+
+    Structural on purpose: short text (a cover, a slide, a numeric table) or a few odd glyphs (TeX delimiters and
+    bullets extract as private-use characters) do not make a born-digital page a scan. The first rule required 200
+    characters, 30 words and under 1% odd characters, and sent such pages to the capture rubric, where labellers could
+    only call them clean scans.
+    """
     if path.suffix != ".pdf":
         return "none"
     facts = pdf_facts(path)
     chars = len("".join(facts["text"].split()))
     if facts["image_coverage"] >= 0.9:
         return "ocr" if chars > 50 else "none"
-    if text_layer_ok(facts["text"]):
-        return "trusted"
     if chars >= 200 and ("(cid:" in facts["text"] or _odd_share(facts["text"]) >= 0.2):
         return "garbled"
-    return "none"
+    return "trusted" if chars >= 20 else "none"
 
 
 # ---------------------------------------------------------------- staging

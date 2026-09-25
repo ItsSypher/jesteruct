@@ -12,13 +12,16 @@ The page files are not in git.
 ## Labelling
 
 Every page is labelled blind, from the 1024 px JPEG the router sees, shuffled under a random id, with nothing that names its source.
-Born-digital pages with a readable text layer are judged on layout (simple, complex or borderline, which map to L1, L2 or L1/L2); every other page on capture (clean, degraded, borderline or handwritten: L3, L4, L3/L4 or L5).
+Born-digital pages are judged on layout (simple, complex or borderline, which map to L1, L2 or L1/L2); every other page on capture (clean, degraded, borderline or handwritten: L3, L4, L3/L4 or L5).
+A PDF page is born-digital unless it is a page-sized image (with or without an OCR layer), has a garbled layer, or holds no text (`sources.text_layer`).
+The first build's test also asked for 200 characters, 30 words and under 1% odd characters, which sent 35 born-digital pages (TeX delimiters and bullets extract as private-use characters; covers, slides and short tables fail the length) to the capture rubric, where they could only be clean scans.
+They were relabelled blind on the layout rubric (issue #9); their capture opinions stay in `labels.jsonl` but no longer count.
 Labeller A is Claude; labeller B is `openai/gpt-6-luna-pro` at high reasoning effort (`label_model.py`), chosen on agreement with `evalset/`'s curated labels.
 When A and B agree, that is the label; otherwise adjudicator C, also blind, decides by majority.
 Opinions that differ only across one boundary (L3 against L4, L1 against L2, or borderline against either) give the set label, and a page that two labellers call unusable, or on which all three differ, is dropped.
-Every opinion is kept in `labels.jsonl`.
-A and B gave the same code to 74.5% of the capture pages and 93.4% of the layout pages.
-On the 361 pages they split, C sided with A 235 times, with B 72 times and with neither 54 times, which gave 243 set labels, 90 single lanes and 28 drops.
+Every opinion is kept in `labels.jsonl`, with the rubric it was given under.
+A and B gave the same code to 73.9% of the capture pages and 93.7% of the layout pages.
+On the 361 pages they split, C sided with A 234 times, with B 73 times and with neither 54 times, which gave 244 set labels, 89 single lanes and 28 drops.
 The source metadata (a camera photo, a handwriting dataset, a born-digital category) and v1's single labels are a sanity check only: `build.py` lists every final label that contradicts them.
 
 ## Sources
@@ -28,7 +31,7 @@ Pages in the set, after labelling:
 | Source | Licence | v1 | v2 | What the pages are |
 |---|---|---|---|---|
 | olmOCR-Bench (`allenai/olmOCR-bench`) | ODC-By 1.0 | 92 | 242 | Single-page PDFs: arXiv maths, tables, multi-column, headers and footers, tiny text, and old scans from the Library of Congress |
-| DocLayNet v1.2 (`docling-project/DocLayNet-v1.2`) | CDLA-Permissive-1.0 | 55 | 56 | Single-page PDFs of financial reports, manuals, patents, laws, tenders and scientific articles, and a few scans |
+| DocLayNet v1.2 (`docling-project/DocLayNet-v1.2`) | CDLA-Permissive-1.0 | 55 | 51 | Single-page PDFs of financial reports, manuals, patents, laws, tenders and scientific articles, and a few scans |
 | PureDocBench (`zhihengli-casia/puredocbench`) | CC BY 4.0 | 66 | 107 | Clean, digital-degraded and real-degraded (phone photo, photocopy, screen photo, screenshot) renders of synthetic documents, mostly Chinese |
 | OmniDocBench (`opendatalab/OmniDocBench`) | Research use only, not commercial | 47 | 121 | Page images of books, exams, newspapers, textbooks, slides and reports, fuzzy or deformed scans, watermarks and handwritten notes, English and Chinese |
 | RVL-CDIP (`jordyvl/rvl_cdip_100_examples_per_class`) | Research use; Truth Tobacco Industry Documents | 30 | 142 | Low-resolution business scans in 12 classes (forms, reports, invoices, specifications, budgets and others) and handwritten pages |
@@ -64,12 +67,13 @@ Cases by lane and split:
 | Part | Split | L1 | L1/L2 | L2 | L3 | L3/L4 | L4 | L5 | All |
 |---|---|---|---|---|---|---|---|---|---|
 | v1 | tune | 45 | 9 | 46 | 110 | 52 | 75 | 58 | 395 |
-| v2 | tune | 44 | 9 | 127 | 173 | 83 | 135 | 98 | 669 |
-| v2 | holdout | 41 | 8 | 123 | 161 | 86 | 134 | 105 | 658 |
-| All | | 130 | 26 | 296 | 444 | 221 | 344 | 261 | 1,722 |
+| v2 | tune | 48 | 9 | 140 | 155 | 83 | 135 | 98 | 668 |
+| v2 | holdout | 41 | 9 | 135 | 144 | 86 | 134 | 105 | 654 |
+| All | | 134 | 27 | 321 | 409 | 221 | 344 | 261 | 1,717 |
 
-The 1,722 cases are 1,681 pages (375 in v1; 655 `tune` and 651 `holdout` in v2) and 41 variants of them: 24 garbled text layers over born-digital PDFs (evidence-level, no new file, lane L3) and 17 Tesseract OCR-layer PDFs of image pages (their image's lanes).
-Of the 1,755 labelled pages, 74 were dropped: 65 that show personal data, 4 blank or nearly blank, 4 that are not documents (folder covers, black pages) and 1 on which all three labellers differed.
+The 1,717 cases are 1,676 pages (375 in v1; 654 `tune` and 647 `holdout` in v2) and 41 variants of them: 24 garbled text layers over born-digital PDFs (evidence-level, no new file, lane L3) and 17 Tesseract OCR-layer PDFs of image pages (their image's lanes).
+Of the 1,755 labelled pages, 79 were dropped: 65 that show personal data, 9 blank or nearly blank, 4 that are not documents (folder covers, black pages) and 1 on which all three labellers differed.
+The release tarball also holds the files of the 5 nearly blank DocLayNet pages dropped by the relabelling; `fetch` checks only the files cases name.
 Nine drawn pages were taken out before the merge as duplicates: a scan that is in both FUNSD and RVL-CDIP, two CORD photos that repeat another CORD photo (one of them a v1 page from another split), and six more pages of the GNU licence text.
 `build.py` now fails on near-identical pages of different documents.
 By their source metadata, about 230 new pages are in Chinese or Japanese (110 of them PureDocBench pages, which are mostly Chinese), 51 in Cyrillic, 34 in Arabic script and 15 in Hebrew, Greek or Devanagari.

@@ -8,7 +8,7 @@
 """Build evalset/fresh: blind-labelled pages, disjoint from evalset/, split once into a tuning and a held-out part.
 
     uv run evalset/fresh/build.py                             # write files/ and cases.jsonl from the labels so far
-    uv run evalset/fresh/build.py packets DIR                 # blind labelling packets of every page
+    uv run evalset/fresh/build.py packets DIR                 # blind packets of the pages still lacking A or B
     uv run evalset/fresh/build.py adjudication-packets DIR    # blind packets of the pages A and B disagree on
     uv run evalset/fresh/build.py ingest --labeller a|c DIR   # add the labels.jsonl files under DIR to labels.jsonl
     uv run evalset/fresh/build.py pack                        # files/ as a release tarball, with its sha256
@@ -95,12 +95,12 @@ def stage_all(pages: list[dict]) -> dict[str, Path]:
 
 
 def rubrics(pages: list[dict], staged: dict[str, Path]) -> dict[str, str]:
-    """Born-digital pages with a readable text layer are judged on layout; every other page on capture."""
+    """Born-digital pages are judged on layout; every other page on capture (sources.text_layer)."""
     path = CACHE / "text_layers.json"
     known = json.loads(path.read_text()) if path.exists() else {}
     for p in pages:
         f = staged[p["key"]]
-        tag = f"{f.name}:{sources.sha256(f)}"
+        tag = f"{sources.TEXT_LAYER_RULE}:{f.name}:{sources.sha256(f)}"
         if tag not in known:
             known[tag] = sources.text_layer(f)
         p["text_layer"] = known[tag]
@@ -152,7 +152,7 @@ def assign_splits(pages: list[dict], gt: dict[str, list[str]]) -> dict[str, str]
         return f"{first['family']} {'/'.join(gt[first['key']])}"
 
     for doc, split in fixed.items():
-        if doc in docs:
+        if doc in docs and any(p["key"] in gt for p in docs[doc]):  # a document whose pages were all dropped counts 0
             count[stratum(doc), split] += sum(p["key"] in gt for p in docs[doc])
     new = sorted((d for d in docs if d not in fixed and any(p["key"] in gt for p in docs[d])), key=_rank)
     for doc in new:
@@ -276,11 +276,9 @@ def write_packets(out: Path, adjudication: bool) -> None:
     pages, _ = catalogue()
     staged = stage_all(pages)
     rubric = rubrics(pages, staged)
-    if adjudication:
-        verdicts = labels.verdicts(labels.load(HERE / "labels.jsonl"), rubric)
-        todo = [(k, rubric[k]) for k, (state, _) in verdicts.items() if state == "needs_c"]
-    else:
-        todo = list(rubric.items())
+    verdicts = labels.verdicts(labels.load(HERE / "labels.jsonl"), rubric)
+    wanted = "needs_c" if adjudication else "pending"
+    todo = [(k, rubric[k]) for k, (state, _) in verdicts.items() if state == wanted]
     counts = labels.write_packets(todo, lambda key: _router_jpeg(staged[key]), out, PACKET_IDS)
     print(f"{counts} images in {out}; the id map is {PACKET_IDS}")
 
