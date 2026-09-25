@@ -1,7 +1,8 @@
-"""Quick OCR for pages without a trustworthy text layer: Apple Vision on macOS, RapidOCR (ONNX) elsewhere.
+"""Quick OCR of a PDF page whose text layer is not trusted, to check the layer against the page: Apple Vision on macOS,
+RapidOCR (ONNX) elsewhere.
 
-The result only feeds evidence (a text sample and a confidence), so one fast English-model pass is enough.
-Engines are created lazily, once per process.
+Only the agreement of the two readings reaches the evidence, so a fast pass is enough. Engines are created lazily, once
+per process.
 """
 
 import io
@@ -63,13 +64,18 @@ def _read_a_word() -> None:
 
 @cache
 def _rapid():
-    from rapidocr import RapidOCR
+    from rapidocr import ModelType, RapidOCR
 
     # One thread per engine: the probe pool already runs one process per core, and ONNX Runtime's default of one thread
-    # per core in every process oversubscribes the CPU many times over.
+    # per core in every process oversubscribes the CPU many times over. PP-OCRv6's tiny models, without the text-angle
+    # classifier, gave the same agreement verdict as the small ones on 68 of 74 untrusted tune layers, at a fifth of the
+    # CPU (about 1 s a page).
     return RapidOCR(
         params={
             "Global.log_level": "warning",
+            "Global.use_cls": False,
+            "Det.model_type": ModelType.TINY,
+            "Rec.model_type": ModelType.TINY,
             "EngineConfig.onnxruntime.intra_op_num_threads": 1,
             "EngineConfig.onnxruntime.inter_op_num_threads": 1,
         }

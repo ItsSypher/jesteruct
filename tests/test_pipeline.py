@@ -3,6 +3,7 @@
 import asyncio
 import json
 import multiprocessing
+import re
 import sys
 from pathlib import Path
 
@@ -28,16 +29,16 @@ pytestmark = pytest.mark.skipif(not BORN_DIGITAL.exists(), reason="evalset files
 
 
 class FakeProvider:
-    """Jev trusts text layers that read as English; the vision check reports handwriting."""
+    """Jev trusts text layers that read as text; the vision check reports handwriting."""
 
     def __init__(self) -> None:
         self.vision_calls = 0
 
     async def decide(self, state: dict[str, str], questions: dict) -> Decision:
         answers = dict.fromkeys(questions, 0.02)
-        if "embedded_text_sample" in state and "reads as normal English prose" in state["page_evidence"]:
+        if "embedded_text_sample" in state and ", reads as " in state["page_evidence"]:
             answers["text_layer_trustworthy"] = 0.97
-        if "mostly_handwritten" in state.get("vision_check", ""):
+        if "handwriting: mostly handwritten" in state.get("vision_check", ""):
             answers["mostly_handwritten"] = 0.95
         return Decision(answers=answers, model="fake-jev", cost=0.0001)
 
@@ -108,7 +109,8 @@ def test_route_mixed_document(tmp_path: Path):
         ("probe", "start"), ("probe", "done"), ("ocr", "skip"), ("vision", "skip"),
         ("jev", "start"), ("jev", "done"), ("policy", "done"),
     ]  # fmt: skip
-    assert set(stages(2)) >= {("ocr", "done"), ("vision", "done")} and stages(2)[-1] == ("policy", "done")
+    # a scan with no text layer: nothing for OCR to check, so the vision check alone
+    assert set(stages(2)) >= {("ocr", "skip"), ("vision", "done")} and stages(2)[-1] == ("policy", "done")
     routed = [e["data"] for e in job1 if e["type"] == "page.stage" and e["stage"] == "policy"]
     assert sorted((r["index"], r["lane"]) for r in routed) == [(0, "L1"), (1, "L1"), (2, "L5")]
     assert all(r["thumb"] == f"/v1/thumbs/{first.doc.sha256}/{r['index']}" for r in routed)
@@ -124,10 +126,27 @@ def _sentences(evidence: str) -> list[str]:
 
 
 def _e1_part(evidence: str) -> list[str]:
-    """e2 moved the column estimate into its layout sentence and e3 added the math clause; the rest is still e1."""
+    """e2 moved the column estimate into its layout sentence, e3 added the math clause and e4 its absence; e4 also
+    measures image coverage in page space (e1 read images inside a scaled figure form at their form size). The rest
+    is still e1."""
     clauses = (", text is laid out in two or more columns", ", text is in a single column")
-    for clause in (*clauses, ", frequent mathematical symbols or operators"):
+    for clause in (*clauses, ", frequent mathematical symbols or operators", ", no mathematical fonts or symbols"):
         evidence = evidence.replace(clause, "")
+    for coverage in ("the page is one full-page image", "images cover a large part of the page"):
+        evidence = evidence.replace(coverage, "little or no image content")
+    # e4 says whether the layer reads as language, in any language, where e1 counted English words
+    for e1 in (
+        ", reads as normal English prose",
+        ", partly readable: names, numbers, fragments, or a non-English language",
+        ", few recognisable English words",
+    ):
+        evidence = evidence.replace(e1, "")
+    evidence = re.sub(
+        r", (reads as [^,.]+|partly reads as [^:]+: names, numbers, table cells or fragments|mostly numbers and symbols"
+        r"|does not read as text in any language(: [^,.]+)?)",
+        "",
+        evidence,
+    )
     return [s for s in _sentences(evidence) if not s.startswith("Layout:")]
 
 
