@@ -211,6 +211,9 @@ The pool size comes from the container's CPU limit.
 **14. OCR differs by platform, behind one function.**
 Apple Vision runs natively on macOS, and RapidOCR (ONNX) runs in Linux containers.
 The backend is part of the route key.
+`auto` first checks, once and in a child process, that Apple Vision answers, and falls back to RapidOCR when it does not.
+The check allows 180 s because after a macOS update Vision recompiles its Neural Engine models (26-59 s on an M4), and it keeps them only for a caller that outlives the compile.
+A shorter deadline, like the probe pool's 60 s task timeout on ten cold workers at once, kills every caller first: the cache never fills, and the compiler keeps a core busy for callers that are already dead.
 
 **15. Cloud-agnostic deployment.**
 Storage is addressed by URL (`s3://`, `gs://`, `az://`, `file://`), and Valkey is any Redis-protocol service.
