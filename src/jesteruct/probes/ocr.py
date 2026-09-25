@@ -5,25 +5,54 @@ Engines are created lazily, once per process.
 """
 
 import io
+import logging
+import subprocess
 import sys
 from functools import cache
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from ..models import OcrResult
 
+log = logging.getLogger(__name__)
+
+APPLE_CHECK_S = 20  # a healthy first Apple Vision call takes about a second
+
 
 def resolve_backend(requested: str) -> str:
+    """`auto` is Apple Vision on macOS when it answers, and RapidOCR otherwise."""
     if requested != "auto":
         return requested
-    if sys.platform == "darwin":
-        try:
-            import ocrmac  # noqa: F401
-        except ImportError:
-            return "rapid"
-        return "apple"
-    return "rapid"
+    if sys.platform != "darwin":
+        return "rapid"
+    try:
+        import ocrmac  # noqa: F401
+    except ImportError:
+        return "rapid"
+    if not _apple_answers():
+        log.warning("Apple Vision OCR did not answer within %d s; using RapidOCR", APPLE_CHECK_S)
+        return "rapid"
+    return "apple"
+
+
+@cache
+def _apple_answers() -> bool:
+    """Apple Vision can hang outright (for example while macOS rebuilds its Neural Engine models after an update), and
+    a hung call cannot be cancelled inside the process, so it is tried once, in a child process with a deadline."""
+    check = [sys.executable, "-c", "from jesteruct.probes.ocr import _read_a_word; _read_a_word()"]
+    try:
+        return subprocess.run(check, capture_output=True, timeout=APPLE_CHECK_S).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def _read_a_word() -> None:
+    img = Image.new("RGB", (320, 64), "white")
+    ImageDraw.Draw(img).text((12, 20), "jesteruct", fill="black")
+    buffer = io.BytesIO()
+    img.save(buffer, "JPEG")
+    _apple(buffer.getvalue())
 
 
 @cache
