@@ -17,7 +17,8 @@ from ..models import OcrResult
 
 log = logging.getLogger(__name__)
 
-APPLE_CHECK_S = 20  # a healthy first Apple Vision call takes about a second
+# A warm first call takes about a second; a cold one compiles Vision's Neural Engine models first (26-59 s measured).
+APPLE_CHECK_S = 180
 
 
 def resolve_backend(requested: str) -> str:
@@ -38,8 +39,13 @@ def resolve_backend(requested: str) -> str:
 
 @cache
 def _apple_answers() -> bool:
-    """Apple Vision can hang outright (for example while macOS rebuilds its Neural Engine models after an update), and
-    a hung call cannot be cancelled inside the process, so it is tried once, in a child process with a deadline."""
+    """Apple Vision can hang outright, and a hung call cannot be cancelled inside the process, so it is tried once, in a
+    child process with a deadline.
+
+    The deadline outlasts a cold compile on purpose. After a macOS update Vision recompiles its models, and it keeps the
+    result only if the caller is still alive when the compile ends; a caller killed sooner leaves the cache cold for the
+    next one. The child runs `sys.executable`, as the probe pool's workers do, because the cache is kept per executable.
+    """
     check = [sys.executable, "-c", "from jesteruct.probes.ocr import _read_a_word; _read_a_word()"]
     try:
         return subprocess.run(check, capture_output=True, timeout=APPLE_CHECK_S).returncode == 0
