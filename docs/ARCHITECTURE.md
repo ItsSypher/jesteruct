@@ -64,6 +64,9 @@ The gains come from reading text layers in any language (decision 18), from find
 Per page, the probes take about 50 ms of CPU, and the 7% of PDF pages whose layer is checked add about 1 s of OCR; under e3 every image page also ran OCR, 4-5 CPU-seconds.
 Latency and cost were last measured on a cold cache on 2026-09-24: born-digital pages take 0.4 s at p50, and pages that need the vision check about 5 s at p50 and 14 s at p95, for about $2.70-2.80 per 1,000 pages; the vision call dominates both, and e4 makes it on about 5% fewer pages.
 
+Sent through the OrbStack deployment with `jst evaluate --api`, all 1,717 fresh pages got the same candidate lane on the Linux workers as in the local run.
+With provider responses cached, so that only the router itself is measured, two workers routed about 7.7 pages a second over the run and 13 at peak; under e3, eight workers managed two, bound by OCR's CPU.
+
 `make smoke` on OrbStack Kubernetes (router v1 with evidence e1):
 - 43 real documents went through the API.
 - KEDA took the workers from 0 to 6.
