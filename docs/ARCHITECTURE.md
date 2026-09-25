@@ -267,6 +267,8 @@ It is Svelte 5 with no component library, and the flow is drawn by hand-written 
 Text and controls are HTML over the canvas, so they stay crisp and accessible.
 Measured in headless Chrome during a demo: 0.07 ms of script per frame at p50 with WebGPU (0.10 ms with Canvas 2D), 17.7 ms frame interval at p99, and 36 kB of JavaScript gzipped.
 The flow is fed by the event stream of decision 16; a document routed before is replayed from its manifest's recorded timings, and with no API it replays a recorded demo.
+A page's preview opens large and zooms with a trackpad pinch; `GET /v1/pages/{sha}/{page}` renders it the first time it is asked for, from the stored document (PDFs at 2400 px, images at their own resolution up to 4096 px), and keeps it, so routing never pays for it.
+The API stores what it is given, and the router stores the PDFs and images it finds inside containers, so every page has a view.
 
 **18. Text layers are read in any language.**
 The cheap rule used to ask for English common words, so a born-digital page in any other language paid for the vision check (issue #7), and the evidence told Jev such a layer had few recognisable words.
