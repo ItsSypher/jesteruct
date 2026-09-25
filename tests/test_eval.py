@@ -2,11 +2,13 @@
 
 import asyncio
 import json
+import re
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import ModuleType
 
+import httpx
 import pytest
 
 from jesteruct.config import Settings
@@ -49,15 +51,17 @@ _CASES = {
 }
 
 
+def _manifest(stem: str) -> Manifest:
+    route, _, _, cost = _CASES[stem]
+    doc = Doc(sha256="0" * 64, name=f"{stem}.pdf", path=stem, kind="pdf", mime="application/pdf", size=1, page_count=1)
+    return Manifest(doc=doc, route_key="k", versions=_VERSIONS, pages=[route], segments=[], cost_usd=cost)
+
+
 class FakeRouter:
     """Stands in for jesteruct.pipeline.Router: one page per file, keyed by the file's stem."""
 
     async def route_file(self, path: Path, name=None, text_overrides=None, reuse=True) -> list[Manifest]:
-        route, _, _, cost = _CASES[path.stem]
-        doc = Doc(
-            sha256="0" * 64, name=path.name, path=str(path), kind="pdf", mime="application/pdf", size=1, page_count=1
-        )
-        return [Manifest(doc=doc, route_key="k", versions=_VERSIONS, pages=[route], segments=[], cost_usd=cost)]
+        return [_manifest(path.stem)]
 
 
 @pytest.fixture
@@ -120,3 +124,43 @@ def test_run_eval_limit(tmp_path: Path, fake_router: None) -> None:
     summary = asyncio.run(run_eval(cases_path, settings, tmp_path / "out", limit=1))
 
     assert summary["overall"]["n"] == 1
+
+
+def test_run_eval_through_a_service(tmp_path: Path, fake_router: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Files go to the service and their jobs are awaited; a case with a text override stays in-process."""
+    import jesteruct.eval as evaluation
+
+    cases_path = tmp_path / "cases.jsonl"
+    _write_cases(cases_path)
+    rows = [json.loads(line) for line in cases_path.read_text().splitlines()]
+    rows[2]["text_override"] = "garbled layer"  # case c
+    cases_path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    polls: dict[str, int] = {}
+
+    def service(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/v1/info":
+            return httpx.Response(200, json={"basis": "service-basis"})
+        if path == "/v1/jobs":
+            stem = re.search(rb'filename="(\w+)\.pdf"', request.content).group(1).decode()
+            return httpx.Response(202, json={"job_id": stem, "status": "queued"})
+        stem = path.rsplit("/", 1)[1]
+        if path.startswith("/v1/manifests/"):
+            return httpx.Response(200, content=_manifest(stem).model_dump_json())
+        polls[stem] = polls.get(stem, 0) + 1
+        if polls[stem] == 1:
+            return httpx.Response(200, json={"job_id": stem, "status": "running"})
+        document = {"doc_sha": stem, "name": f"{stem}.pdf", "parent_sha": None, "manifest_key": "k", "lanes": {}}
+        return httpx.Response(200, json={"job_id": stem, "status": "done", "documents": [document]})
+
+    client, transport = httpx.AsyncClient, httpx.MockTransport(service)
+    monkeypatch.setattr(evaluation.httpx, "AsyncClient", lambda **kw: client(transport=transport, **kw))
+    monkeypatch.setattr(evaluation, "POLL_S", 0)
+    settings = Settings(store_url=f"file://{tmp_path / 'store'}")
+
+    summary = asyncio.run(run_eval(cases_path, settings, tmp_path / "out", api="http://service"))
+
+    assert (summary["overall"]["n"], summary["n_errors"]) == (3, 0)
+    assert polls == {"a": 2, "b": 2}  # c never reached the service
+    basis = {r["id"]: r["basis"] for r in map(json.loads, (tmp_path / "out/results.jsonl").read_text().splitlines())}
+    assert basis["a"] == basis["b"] == "service-basis" != basis["c"]
