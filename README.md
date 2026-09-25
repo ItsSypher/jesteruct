@@ -23,7 +23,9 @@ uv run jst route samples/      # manifests in out/
 uv run jst view out            # out/report.html: thumbnails, lanes and reasons
 uv run jst probe file.pdf      # the evidence for one page, without calling any model
 uv run jst evaluate            # route the labelled set in evalset/ and report accuracy
-uv run jst calibrate out/evaluate/results.jsonl   # refit when to send a page to review
+uv run evalset/fresh/build.py fetch   # the 1,722-page fresh set, a release asset rather than files in git
+uv run jst evaluate --cases evalset/fresh/cases.jsonl --out out/fresh
+uv run jst calibrate out/fresh/results.jsonl   # refit when to send a page to review; never fits on holdout
 ```
 
 ## Run it as a service
@@ -33,6 +35,7 @@ docker run -d -p 6379:6379 valkey/valkey:8
 JST_VALKEY_URL=redis://localhost:6379/0 uv run jst worker &
 JST_VALKEY_URL=redis://localhost:6379/0 uv run jst serve
 curl -F file=@doc.pdf 'localhost:8000/v1/jobs?wait=30'
+uv run jst evaluate --api http://localhost:8000   # the labelled set, sent through the service as a user would
 ```
 
 ## Studio

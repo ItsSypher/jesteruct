@@ -37,11 +37,12 @@ def evaluate(
     cases: Annotated[Path, typer.Option(help="Labelled cases (JSONL).")] = Path("evalset/cases.jsonl"),
     out: Annotated[Path, typer.Option(help="Where to write the report.")] = Path("out/evaluate"),
     limit: int | None = None,
+    api: Annotated[str | None, typer.Option(help="A running service to route through (http://localhost:8000).")] = None,
 ) -> None:
     """Route the labelled eval set and report lane accuracy, under-routing, latency and cost."""
     from .eval import run_eval
 
-    summary = asyncio.run(run_eval(cases, get_settings(), out, limit))
+    summary = asyncio.run(run_eval(cases, get_settings(), out, limit, api))
     typer.echo(json.dumps(summary, indent=2))
 
 
@@ -52,19 +53,26 @@ def calibrate(
     cost_ratio: Annotated[float, typer.Option(help="Cost of a silent wrong lane / cost of one review.")] = 10.0,
     out: Annotated[Path | None, typer.Option(help="Where to write the calibration.")] = None,
 ) -> None:
-    """Fit the review calibration on evaluation results and write it where the router loads it."""
+    """Fit the review calibration on evaluation results and write it where the router loads it.
+
+    Rows of the held-out split are never fitted on; they are reported separately.
+    """
     from . import calibrate as cal
     from .pipeline import CALIBRATION_FILE
 
     rows = [json.loads(line) for path in results for line in path.read_text().split("\n") if line.strip()]
-    fitted = cal.fit(rows, cost_ratio, fitted_on=", ".join(str(p) for p in results))
+    held_out = [r for r in rows if r.get("split") == "holdout"]
+    fit_rows = [r for r in rows if r.get("split") != "holdout"]
+    fitted = cal.fit(fit_rows, cost_ratio, fitted_on=", ".join(str(p) for p in results) + ", holdout excluded")
     cal.save(fitted, out or CALIBRATION_FILE)
     report = {
         "version": fitted.version,
         "n": fitted.n,
         "threshold": fitted.threshold,
-        "fit": cal.evaluate(fitted, rows),
+        "fit": cal.evaluate(fitted, fit_rows),
     }
+    if held_out:
+        report["holdout"] = cal.evaluate(fitted, held_out)
     if check:
         held_out = [json.loads(line) for line in check.read_text().split("\n") if line.strip()]
         report["check"] = cal.evaluate(fitted, held_out)

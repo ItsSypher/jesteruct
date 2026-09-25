@@ -45,3 +45,6 @@ bench/vision_bakeoff/data/contact_sheets/
 
 # local worktrees
 .claude/
+
+# evalset/fresh page files live in the release evalset-fresh-v2: uv run evalset/fresh/build.py fetch
+evalset/fresh/files/

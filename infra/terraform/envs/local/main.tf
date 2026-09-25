@@ -63,8 +63,9 @@ module "app" {
   store_client_options = module.devstack.store_client_options
   store_credentials    = module.devstack.store_credentials
 
-  # Sized for a laptop: six workers fit next to the devstack.
-  api_replicas = 1
+  # Sized for a laptop: OrbStack's default VM (12 GiB) fits eight workers of about 1 GiB next to the devstack.
+  api_replicas      = 1
+  keda_max_replicas = var.keda_max_replicas
   worker_resources = {
     requests = { cpu = "1", memory = "1Gi" }
     limits   = { cpu = "2", memory = "3Gi" }
