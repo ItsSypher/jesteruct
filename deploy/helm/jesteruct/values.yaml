@@ -56,7 +56,7 @@ api:
 
 worker:
   replicas: 1  # used only when keda.enabled is false
-  maxDocs: 2  # JST_WORKER_MAX_DOCS: documents one worker routes at a time
+  maxDocs: 32  # JST_WORKER_MAX_DOCS: documents one worker routes at a time, up to its 32 pages in flight
   metricsPort: 9090
   terminationGracePeriodSeconds: 600  # a worker finishes its documents before it exits
   # The limits.cpu value sizes the probe process pool (JST_CPU_WORKERS).
@@ -67,9 +67,10 @@ worker:
 keda:
   enabled: true
   minReplicas: 0
-  # Jev allows 1,200 requests a minute (JST_JEV_RPM keeps us at 1,000), about 16 pages a second across all workers.
-  # Six workers reach that; more would only queue on the shared rate limiter.
+  # The providers bound the whole system: the vision model at 600 requests a minute (10 image pages a second) and Jev
+  # at 1,000 (about 16 pages a second). A worker's 32 pages in flight wait on them, not on its CPU, so three to six
+  # workers reach those limits; more would only queue on the shared rate limiters.
   maxReplicas: 6
   cooldownSeconds: 300  # idle time before scaling to minReplicas
   pollingInterval: 15
-  documentsPerWorker: 4  # unfinished documents (queued or in progress) per worker before another is added
+  documentsPerWorker: 32  # unfinished documents (queued or in progress) per worker before another is added

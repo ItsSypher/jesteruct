@@ -81,7 +81,7 @@ variable "api_replicas" {
 
 variable "worker_max_docs" {
   type    = number
-  default = 2
+  default = 32
 }
 
 variable "keda_max_replicas" {
