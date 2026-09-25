@@ -123,6 +123,7 @@ class PageRoute(BaseModel):
     continuation: float | None = None
     vision: VisionFacts | None = None
     reasons: list[str] = Field(default_factory=list)
+    evidence: str | None = None  # what Jev was told about the page, in words (never the page's text)
     thumb_key: str | None = None
     timings_ms: dict[str, int] = Field(default_factory=dict)
 

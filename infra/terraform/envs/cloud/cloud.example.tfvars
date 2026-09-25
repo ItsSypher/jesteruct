@@ -27,3 +27,8 @@ existing_secret = "jesteruct-openrouter"
 service_account_annotations = {
   "eks.amazonaws.com/role-arn" = "arn:aws:iam::123456789012:role/jesteruct"
 }
+
+# The Studio and the API at one host, through the cluster's ingress controller (leave out to reach them by port-forward).
+ingress_host       = "jesteruct.example.com"
+ingress_class_name = "nginx"
+ingress_tls_secret = "jesteruct-tls"

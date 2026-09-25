@@ -25,6 +25,26 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run pytest
 
+  web:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6  # the version comes from packageManager in web/package.json
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+
   # Each architecture builds on a native runner: under QEMU the arm64 build took about ten minutes. Pull requests only
   # prove the image builds; on main each architecture is pushed by digest and `publish` tags the multi-arch manifest.
   image:
@@ -76,7 +96,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    needs: [test, image]
+    needs: [test, web, image]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

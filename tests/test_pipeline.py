@@ -12,6 +12,7 @@ from pebble import ProcessPool
 from PIL import Image
 
 from jesteruct.config import Settings
+from jesteruct.events import Events
 from jesteruct.evidence import build_state
 from jesteruct.models import Manifest, PageRef, VisionFacts
 from jesteruct.pipeline import Router
@@ -67,14 +68,18 @@ def test_route_mixed_document(tmp_path: Path):
     settings = Settings(store_url=f"file://{tmp_path / 'store'}", page_concurrency=4)
     store = Store.from_settings(settings)
     provider = FakeProvider()
+    seen: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        seen.append(json.loads(json.dumps(event)))  # what a browser receives
 
     async def run() -> tuple[Manifest, Manifest]:
         pool = ProcessPool(max_workers=2, context=multiprocessing.get_context("spawn"))
         try:
             router = Router(settings, store, provider, pool)
             path = mixed_pdf(tmp_path)
-            (first,) = await router.route_file(path)
-            (again,) = await router.route_file(path)  # same bytes and route key: the stored manifest is reused
+            (first,) = await router.route_file(path, events=Events(sink, "job-1"))
+            (again,) = await router.route_file(path, events=Events(sink, "job-2"))  # the stored manifest is reused
             return first, again
         finally:
             pool.close()
@@ -87,6 +92,29 @@ def test_route_mixed_document(tmp_path: Path):
     assert again.created_at == first.created_at
     assert asyncio.run(store.exists(manifest_key(first.doc.sha256, first.route_key)))
     assert all(asyncio.run(store.exists(p.thumb_key)) for p in first.pages)
+    assert all(p.evidence.startswith("Input: ") for p in first.pages)  # the manifest keeps what Jev was told
+
+    job1 = [e for e in seen if e["job_id"] == "job-1"]
+    assert (job1[0]["type"], job1[0]["page_count"]) == ("doc", 3)
+    assert (job1[-1]["type"], job1[-1]["cached"]) == ("doc.done", False)
+
+    def page_events(page: int) -> list[dict]:
+        return [e for e in job1 if e["type"] == "page.stage" and e["page"] == page]
+
+    def stages(page: int) -> list[tuple[str, str]]:
+        return [(e["stage"], e["state"]) for e in page_events(page)]
+
+    assert stages(0) == [
+        ("probe", "start"), ("probe", "done"), ("ocr", "skip"), ("vision", "skip"),
+        ("jev", "start"), ("jev", "done"), ("policy", "done"),
+    ]  # fmt: skip
+    assert set(stages(2)) >= {("ocr", "done"), ("vision", "done")} and stages(2)[-1] == ("policy", "done")
+    routed = [e["data"] for e in job1 if e["type"] == "page.stage" and e["stage"] == "policy"]
+    assert sorted((r["index"], r["lane"]) for r in routed) == [(0, "L1"), (1, "L1"), (2, "L5")]
+    assert all(r["thumb"] == f"/v1/thumbs/{first.doc.sha256}/{r['index']}" for r in routed)
+    probe = next(e["data"] for e in page_events(0) if (e["stage"], e["state"]) == ("probe", "done"))
+    assert probe["text_layer_trusted"] and probe["evidence"].startswith("Input: ")
+    assert [e["type"] for e in seen if e["job_id"] == "job-2"] == ["doc", "doc.done"]  # cached: no page events
 
 
 def _sentences(evidence: str) -> list[str]:

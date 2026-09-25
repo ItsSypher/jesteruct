@@ -19,6 +19,7 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from redis.exceptions import RedisError
 
 from .config import Settings
+from .events import Events, Sink, valkey_sink
 from .models import DocEntry, JobIndex, Manifest
 from .queue import Delivery, JobQueue, connect
 from .store import Store, job_key, manifest_key
@@ -60,12 +61,14 @@ async def run(settings: Settings, metrics_port: int) -> None:
     try:
         async with open_router(settings, store, valkey) as router:
             log.info("started consumer=%s slots=%d", queue.consumer, settings.worker_max_docs)
-            await consume(queue, router, store, settings.worker_max_docs, stop)
+            await consume(queue, router, store, settings.worker_max_docs, stop, valkey_sink(valkey))
     finally:
         await valkey.aclose()
 
 
-async def consume(queue: JobQueue, router: "Router", store: Store, slots: int, stop: asyncio.Event) -> None:
+async def consume(
+    queue: JobQueue, router: "Router", store: Store, slots: int, stop: asyncio.Event, sink: Sink | None = None
+) -> None:
     """Keep up to `slots` jobs running until `stop` is set, then wait for the in-flight ones."""
     inflight: dict[str, asyncio.Task] = {}
     every = max(1.0, queue.claim_idle_s / 4)
@@ -90,7 +93,7 @@ async def consume(queue: JobQueue, router: "Router", store: Store, slots: int, s
             for d in deliveries:
                 if d.id in inflight:  # reclaimed from ourselves after missed heartbeats; it is already running
                     continue
-                inflight[d.id] = asyncio.create_task(process(d, router, store, queue))
+                inflight[d.id] = asyncio.create_task(process(d, router, store, queue, sink))
                 inflight[d.id].add_done_callback(lambda _, message_id=d.id: inflight.pop(message_id))
         if inflight:
             log.info("draining inflight=%d", len(inflight))
@@ -108,12 +111,14 @@ async def _heartbeat(queue: JobQueue, inflight: dict[str, asyncio.Task], every: 
             log.exception("heartbeat failed")
 
 
-async def process(d: Delivery, router: "Router", store: Store, queue: JobQueue) -> None:
+async def process(d: Delivery, router: "Router", store: Store, queue: JobQueue, sink: Sink | None = None) -> None:
     """Route one job's input, write its manifests and index, then ack. On failure the message stays unacked."""
     started = time.monotonic()
+    events = Events(sink, d.job_id)
     INFLIGHT.inc()
     try:
         await queue.set_status(d.job_id, "running")
+        await events("job.started", deliveries=int(d.job["deliveries"]))
         with tempfile.TemporaryDirectory(prefix="jst-job-") as work:
             data = await store.get(d.job["input_key"])
             if data is None:
@@ -121,7 +126,7 @@ async def process(d: Delivery, router: "Router", store: Store, queue: JobQueue) 
             name = Path(d.job["name"]).name
             path = Path(work) / (name if name not in ("", "..") else "input")
             await asyncio.to_thread(path.write_bytes, data)
-            manifests = await router.route_file(path, d.job["name"])
+            manifests = await router.route_file(path, d.job["name"], events=events)
         documents = [await _publish(m, router.route_key, store) for m in manifests]
         index = JobIndex(
             job_id=d.job_id,
@@ -133,11 +138,14 @@ async def process(d: Delivery, router: "Router", store: Store, queue: JobQueue) 
         await store.put_json(job_key(d.job_id), index)
         await queue.set_status(d.job_id, "done")
         await queue.ack(d.id)
+        await events("job.done", status="done", error=None)
     except Exception as e:
         JOBS.labels("error").inc()
         log.exception("job failed job=%s delivery=%s", d.job_id, d.job.get("deliveries"))
+        error = f"{type(e).__name__}: {e}"
+        await events("job.retry", error=error, deliveries=int(d.job["deliveries"]))  # redelivered, or dead-lettered
         try:
-            await queue.set_status(d.job_id, "queued", error=f"{type(e).__name__}: {e}")
+            await queue.set_status(d.job_id, "queued", error=error)
         except RedisError:
             log.exception("could not record the error job=%s", d.job_id)
     else:

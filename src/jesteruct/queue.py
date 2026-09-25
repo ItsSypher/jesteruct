@@ -9,13 +9,16 @@ Acked messages are deleted, so the stream holds only unfinished work. Scripts an
 the Valkey deployment must not be in cluster mode.
 """
 
+import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
+from . import events
 from .config import Settings
 from .models import JobStatus
 
@@ -144,8 +147,11 @@ class JobQueue:
     async def _dead_letter(self, d: Delivery) -> None:
         error = f"gave up after {self.max_deliveries} deliveries: {d.job.get('error') or 'worker lost'}"
         log.warning("dead-letter job=%s message=%s error=%r", d.job_id, d.id, error)
+        done = {"type": "job.done", "job_id": d.job_id, "at": round(time.time() * 1000), "status": "failed"}
+        event = {"t": "job.done", "j": d.job_id, "e": json.dumps({**done, "error": error})}
         async with self.valkey.pipeline(transaction=True) as p:
             p.xadd(DEAD, {"job_id": d.job_id, "message_id": d.id, "error": error})
+            p.xadd(events.STREAM, event, maxlen=events.MAXLEN, approximate=True)
             p.hset(job_hash(d.job_id), mapping={"status": "failed", "error": error})
             p.expire(job_hash(d.job_id), FINISHED_TTL_S)
             p.xack(self.stream, self.group, d.id)
