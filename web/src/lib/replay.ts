@@ -60,15 +60,22 @@ function pageEvents(route: PageRoute, sha: string, job: string, start: number): 
       stage: 'probe',
       state: 'done',
       ms: t.probe,
-      data: { text_layer_trusted: !read, evidence: '', image: {}, layout: null, pdf: null },
+      data: { text_layer_trusted: !read, evidence: '', image: {}, layout: null, pdf: null, text: route.text ?? null },
     },
   ];
   if (!read) {
     out.push({ ...base, at: probed, stage: 'ocr', state: 'skip' }, { ...base, at: probed, stage: 'vision', state: 'skip' });
   } else {
-    out.push({ ...base, at: probed, stage: 'ocr', state: 'start' }, { ...base, at: probed, stage: 'vision', state: 'start' });
-    if (t.ocr != null) out.push({ ...base, at: probed + t.ocr, stage: 'ocr', state: 'done', ms: t.ocr, data: null });
-    else out.push({ ...base, at: probed, stage: 'ocr', state: 'fail' });
+    // OCR runs only to check an untrusted PDF text layer: no timing and no failure means the page had none to check
+    if (t.ocr != null)
+      out.push(
+        { ...base, at: probed, stage: 'ocr', state: 'start' },
+        { ...base, at: probed + t.ocr, stage: 'ocr', state: 'done', ms: t.ocr, data: null },
+      );
+    else if (route.reasons.some((r) => r.startsWith('ocr_failed')))
+      out.push({ ...base, at: probed, stage: 'ocr', state: 'start' }, { ...base, at: probed, stage: 'ocr', state: 'fail' });
+    else out.push({ ...base, at: probed, stage: 'ocr', state: 'skip' });
+    out.push({ ...base, at: probed, stage: 'vision', state: 'start' });
     if (t.vision != null && route.vision)
       out.push({ ...base, at: probed + t.vision, stage: 'vision', state: 'done', ms: t.vision, data: route.vision });
     else out.push({ ...base, at: probed, stage: 'vision', state: 'fail' });

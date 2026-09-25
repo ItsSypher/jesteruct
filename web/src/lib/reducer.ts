@@ -12,6 +12,7 @@ import type {
   Stage,
   StageState,
   StudioEvent,
+  TextReading,
   VisionFacts,
 } from './types';
 
@@ -23,6 +24,7 @@ export interface PageView {
   evidence: string | null;
   image: Record<string, number> | null;
   layout: Layout | null;
+  text: TextReading | null;
   ocr: OcrFacts | null;
   vision: VisionFacts | null;
   model: string | null;
@@ -80,6 +82,7 @@ const blankPage = (index: number): PageView => ({
   evidence: null,
   image: null,
   layout: null,
+  text: null,
   ocr: null,
   vision: null,
   model: null,
@@ -127,6 +130,7 @@ function page(p: PageView, e: Extract<StudioEvent, { type: 'page.stage' }>): Pag
         evidence: e.data.evidence || null, // replays of stored manifests carry no evidence
         image: e.data.image,
         layout: e.data.layout,
+        text: e.data.text ?? null,
       };
     case 'ocr':
       return { ...next, ocr: e.data };
@@ -142,6 +146,7 @@ function page(p: PageView, e: Extract<StudioEvent, { type: 'page.stage' }>): Pag
         answers: route.answers,
         evidence: route.evidence ?? p.evidence,
         vision: route.vision ?? p.vision,
+        text: route.text ?? p.text,
         thumb: thumb ?? p.thumb,
       };
     }
