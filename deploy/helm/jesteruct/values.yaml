@@ -72,4 +72,4 @@ keda:
   maxReplicas: 6
   cooldownSeconds: 300  # idle time before scaling to minReplicas
   pollingInterval: 15
-  lagCount: 4  # undelivered documents per worker before another worker is added
+  documentsPerWorker: 4  # unfinished documents (queued or in progress) per worker before another is added

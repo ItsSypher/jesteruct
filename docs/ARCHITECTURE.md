@@ -81,7 +81,7 @@ One library, two ways to run it.
 
 ```
 client ─► API ─► object store (inputs/)            workers ─► object store (manifests/, thumbs/, cache/)
-            └──► Valkey stream jst:jobs ──────────► ▲  scaled by KEDA on stream lag
+            └──► Valkey stream jst:jobs ──────────► ▲  scaled by KEDA on stream length
 Studio ◄── API ◄── Valkey stream jst:events ◄──────── workers report each page's progress
 ```
 
@@ -195,7 +195,7 @@ Job ids combine the input hash with the route key, so duplicate submissions coll
 Manifests live at `manifests/{doc_sha}/{route_key}.json`, and existing ones are reused.
 
 **11. Valkey Streams with a small consumer, not a task framework.**
-KEDA can scale on stream lag; arq's sorted set cannot be scaled on.
+KEDA scales workers on the stream's length: acked messages are deleted, so it is exactly the unfinished work, whereas Valkey stops reporting the group's lag once entries are deleted. arq's sorted set cannot be scaled on.
 Celery fights asyncio, and NATS would add a second stateful service.
 The consumer is about 150 lines: heartbeats, reclaiming stalled messages, dead-lettering.
 
