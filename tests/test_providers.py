@@ -48,6 +48,11 @@ def test_status_classification(tmp_path, status, error):
         asyncio.run(p.decide({"page_evidence": "x"}, QUESTIONS))
 
 
+def test_a_missing_key_fails_at_startup(tmp_path):
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        OpenRouter(Settings(openrouter_api_key=""), Store(f"file://{tmp_path}"), LocalLimiter(), httpx.AsyncClient())
+
+
 def test_unusable_output_is_retried_and_never_cached(tmp_path):
     good = {"answers": {"text_layer_trustworthy": {"noul": 0.9}}}
     replies = iter([{"answers": {}}, {"choices": None}, good])

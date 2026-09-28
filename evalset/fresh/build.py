@@ -307,14 +307,21 @@ def pack() -> None:
     print(f"gh release create {RELEASE} {out} {out.with_suffix('.tar.sha256')} --title {RELEASE}")
 
 
+def _download(name: str, dest: Path) -> None:
+    """A release asset: a plain download when the release is public, and an authenticated gh when it is not."""
+    url = f"https://github.com/ItsSypher/jesteruct/releases/download/{RELEASE}/{name}"
+    if subprocess.run(["curl", "-fsSL", "--retry", "3", "-o", str(dest / name), url]).returncode:
+        subprocess.run(
+            ["gh", "release", "download", RELEASE, "--pattern", name, "--dir", str(dest), "--clobber"], check=True
+        )
+
+
 def fetch() -> None:
     """Download the release asset, check it, unpack it into files/ and verify every case file against cases.jsonl."""
     dest = CACHE / "release"
     dest.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["gh", "release", "download", RELEASE, "--pattern", f"{RELEASE}.tar*", "--dir", str(dest), "--clobber"],
-        check=True,
-    )
+    for name in (f"{RELEASE}.tar", f"{RELEASE}.tar.sha256"):
+        _download(name, dest)
     tar_path = dest / f"{RELEASE}.tar"
     want = (dest / f"{RELEASE}.tar.sha256").read_text().split()[0]
     if sources.sha256(tar_path) != want:

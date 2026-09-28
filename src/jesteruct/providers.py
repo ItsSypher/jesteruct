@@ -180,7 +180,10 @@ class OpenRouter:
         self._store = store
         self._limiter = limiter
         self._client = client
-        self._headers = {"Authorization": f"Bearer {settings.openrouter_api_key.get_secret_value()}"}
+        # Checked here, because httpx rejects an empty bearer header as a transport error, which is retried for minutes.
+        if not (key := settings.openrouter_api_key.get_secret_value().strip()):
+            raise ValueError("no OpenRouter API key: set OPENROUTER_API_KEY in .env (copy .env.example)")
+        self._headers = {"Authorization": f"Bearer {key}"}
         self._batcher = _Batcher(self._decide_batch, settings.jev_batch_size, settings.jev_batch_wait_ms / 1000)
 
     async def decide(self, state: dict[str, str], questions: dict) -> Decision:
