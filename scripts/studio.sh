@@ -19,4 +19,7 @@ trap 'kill $(jobs -p) 2>/dev/null; docker rm -f jst-studio-valkey >/dev/null' EX
 uv run jst worker --metrics-port 9090 &
 uv run jst serve --port "$PORT" &
 echo "Studio: http://localhost:$PORT"
-wait
+# Stop everything when either exits (a missing key stops the worker) rather than serve jobs no one will route;
+# a loop, because macOS ships bash 3.2, which has no `wait -n`.
+while [[ $(jobs -rp | wc -l) -eq 2 ]]; do sleep 1; done
+exit 1
